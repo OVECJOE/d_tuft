@@ -1,4 +1,4 @@
-type OpcodeValue =
+export type OpcodeValue =
     | 0x00
     | 0x01
     | 0x02
