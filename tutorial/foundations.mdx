@@ -1,0 +1,1679 @@
+# THE COMPLETE SMART CONTRACT SECURITY MASTERCLASS
+## From First Contract to Top 1% Security Researcher
+
+### Building a Production-Grade Symbolic Execution Engine
+*A comprehensive journey to mastering smart contract security through deep implementation*
+
+---
+
+# Course Philosophy
+
+**What makes this different:**
+- We build ONE thing deeply, not many things superficially
+- Every line of code is explained at multiple levels
+- We start from absolute fundamentals
+- By the end, you'll have a tool good enough to find real bugs and make real money
+
+**What we're building:**
+- **Heimdall**: A production-grade symbolic execution engine
+  - TypeScript version for off-chain analysis
+  - Solidity version for on-chain verification
+  - Both versions production-ready, not toys
+
+**Your journey:**
+- Week 1-2: Deep EVM fundamentals
+- Week 3-4: Symbolic execution theory
+- Week 5-8: Build TypeScript engine
+- Week 9-10: Build Solidity engine
+- Week 11-12: Real bug hunting
+
+---
+
+# PART I: EVM FUNDAMENTALS - GOING DEEP
+
+## Chapter 1: Understanding the EVM at the Deepest Level
+
+### 1.1 What Actually Happens When You Deploy a Contract?
+
+**Let's start with your actual contract from github.com/ovecjoe/skillproof:**
+
+```solidity
+// Simplified version
+contract SkillProof {
+    mapping(address => string) public skills;
+    
+    function addSkill(string memory skill) public {
+        skills[msg.sender] = skill;
+    }
+}
+```
+
+**When you deploy this, here's EXACTLY what happens:**
+
+#### Step 1: Compilation to Bytecode
+
+Your Solidity code becomes:
+```
+BYTECODE (creation code):
+608060405234801561001057600080fd5b50610150...
+
+RUNTIME BYTECODE (deployed code):
+6080604052348015600f57600080fd5b506004361060325760003560e01c8063371303c01460375780638da5cb5b14605f575b600080fd5b605d60048036036020811015604b57600080fd5b8101908080359060200190929190505050607d565b005b606560c9565b604051808273ffffffffffffffffffffffffffffffffffffffff1673ffffffffffffffffffffffffffffffffffffffff16815260200191505060405180910390f35b80600160006101000a81548173ffffffffffffffffffffffffffffffffffffffff021916908373ffffffffffffffffffffffffffffffffffffffff16021790555050565b600160009054906101000a900473ffffffffffffffffffffffffffffffffffffffff168156fea265627a7a72315820...
+```
+
+**Let me break down EVERY SINGLE BYTE:**
+
+```
+CREATION CODE (what gets sent in the transaction):
+
+60 80          PUSH1 0x80          // Free memory pointer
+60 40          PUSH1 0x40          // Memory location to store it
+52             MSTORE              // Store free memory pointer at 0x40
+
+34             CALLVALUE           // Get ETH sent with transaction
+80             DUP1                // Duplicate it
+15             ISZERO              // Check if zero
+61 0010        PUSH2 0x0010        // Jump destination
+57             JUMPI               // Jump if no ETH sent
+60 00          PUSH1 0x00          
+FD             REVERT              // Revert if ETH was sent
+
+5B             JUMPDEST            // Jump destination (0x0010)
+50             POP                 // Clean up stack
+
+61 0150        PUSH2 0x0150        // Size of runtime code
+80             DUP1                // Duplicate size
+61 001a        PUSH2 0x001a        // Offset of runtime code in creation code
+60 00          PUSH1 0x00          // Destination in memory
+39             CODECOPY            // Copy runtime code to memory
+60 00          PUSH1 0x00          // Offset in memory
+F3             RETURN              // Return runtime code
+```
+
+**What does each opcode ACTUALLY do at the hardware level?**
+
+**MSTORE (0x52):**
+```
+Before: stack = [value, offset]
+        memory = []
+
+Operation:
+1. Pop offset from stack → offset = 0x40
+2. Pop value from stack → value = 0x80
+3. memory[offset:offset+32] = value (32 bytes)
+
+After:  stack = []
+        memory[0x40:0x60] = 0x0000...0080
+
+Gas cost: 3 + (3 if new memory allocated)
+```
+
+**JUMPI (0x57):**
+```
+Before: stack = [destination, condition]
+        pc = 0x0D
+
+Operation:
+1. Pop destination from stack → destination = 0x0010
+2. Pop condition from stack → condition = 1 (ISZERO returned 1)
+3. If condition != 0:
+     pc = destination
+   Else:
+     pc = pc + 1
+
+After:  stack = []
+        pc = 0x0010
+
+Gas cost: 10
+```
+
+#### Step 2: Transaction Execution
+
+When you send the deployment transaction:
+
+```javascript
+// What ethers.js does internally
+const tx = {
+    to: null,                    // null = contract creation
+    data: "0x608060405234801561001057600080fd5b50610150...",
+    gas: 500000,
+    gasPrice: 20000000000,
+    nonce: 0,
+    value: 0
+}
+```
+
+**The node receives this and:**
+
+1. **Validates transaction:**
+   ```
+   - Signature valid? ✓
+   - Nonce correct? ✓
+   - Balance >= gas * gasPrice? ✓
+   ```
+
+2. **Creates new address:**
+   ```
+   address = keccak256(RLP([sender_address, nonce]))[12:]
+   
+   Example:
+   sender = 0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb
+   nonce = 0
+   
+   RLP([sender, nonce]) = 0xd694742d35cc6634c0532925a3b844bc9e7595f0beb80
+   keccak256(...) = 0x8a8eafb1cf62bfbeb1741769dae1a9dd479961928d1a
+   address = 0x479961928d1a... (last 20 bytes)
+   ```
+
+3. **Executes creation code:**
+   ```
+   - Initialize EVM
+   - Load bytecode
+   - Start at pc = 0
+   - Execute until RETURN
+   - Take returned data as runtime code
+   - Store runtime code at new address
+   ```
+
+4. **Final state:**
+   ```
+   contracts[0x479961928d1a...] = {
+       code: "6080604052348015600f57600080fd5b506004361060325760003560e01c...",
+       storage: {},
+       balance: 0,
+       nonce: 1
+   }
+   ```
+
+### 1.2 Deep Dive: Storage Layout
+
+**Your mapping:**
+```solidity
+mapping(address => string) public skills;
+```
+
+**How is this ACTUALLY stored?**
+
+```
+Storage slots are 32 bytes each.
+Mappings don't have a "location" - values are computed.
+
+For mapping at slot p and key k:
+slot = keccak256(abi.encode(k, p))
+
+Example:
+skills is at slot 0
+You call: addSkill("Solidity")
+msg.sender = 0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb
+
+Storage slot calculation:
+p = 0
+k = 0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb (left-padded to 32 bytes)
+
+abi.encode(k, p) = 
+  0x000000000000000000000000742d35cc6634c0532925a3b844bc9e7595f0beb0000000000000000000000000000000000000000000000000000000000000000
+
+keccak256(...) = 
+  0x6e1540171b6c0c960b71a7020d9f60077f6af931a8bbf590da0223dacf75c7af
+
+This is where "Solidity" is stored!
+```
+
+**But "Solidity" is a string (variable length). How is THAT stored?**
+
+```
+For strings longer than 31 bytes:
+- The slot contains: length * 2 + 1
+- The actual data is at keccak256(slot)
+
+For strings ≤ 31 bytes:
+- The slot contains: data || length * 2
+  (data right-aligned, length in last byte)
+
+"Solidity" = 8 bytes = "0x536f6c6964697479"
+
+Storage at 0x6e1540171b6c0c960b71a7020d9f60077f6af931a8bbf590da0223dacf75c7af:
+0x536f6c6964697479000000000000000000000000000000000000000000000010
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ (padding)
+                                                                      ^^ (length * 2 = 16)
+```
+
+**Why multiply length by 2?**
+
+To distinguish between short and long strings!
+- If last byte is odd → long string (last byte = length * 2 + 1)
+- If last byte is even → short string (last byte = length * 2)
+
+### 1.3 Function Calls: The Complete Picture
+
+**When you call `addSkill("Ethereum")`:**
+
+```
+CALLDATA sent:
+0x371303c0                                                          // Function selector
+0000000000000000000000000000000000000000000000000000000000000020  // Offset to string data
+0000000000000000000000000000000000000000000000000000000000000008  // String length (8)
+457468657265756d000000000000000000000000000000000000000000000000  // "Ethereum" (padded)
+```
+
+**How is the function selector calculated?**
+
+```
+keccak256("addSkill(string)") = 
+  0x371303c0a7c84f5a9dc6de3cea6b057f96733ef0ee5dba73e00f83d6adef5935
+
+First 4 bytes = 0x371303c0 = function selector
+```
+
+**Execution inside the contract:**
+
+```
+Step 1: Load function selector from calldata
+CALLDATALOAD(0) = 0x371303c0... (first 32 bytes)
+SHR 224         = 0x371303c0     (shift right to get first 4 bytes)
+
+Step 2: Compare with known selectors
+DUP1                              // Duplicate selector
+PUSH4 0x371303c0                  // addSkill selector
+EQ                                // Compare
+PUSH2 0x0037                      // Jump destination for addSkill
+JUMPI                             // Jump if equal
+
+Step 3: Execute addSkill function
+(at pc 0x0037)
+
+JUMPDEST                          // Valid jump destination
+
+// Load string from calldata
+PUSH1 0x04                        // Skip selector
+CALLDATALOAD                      // Load offset (0x20)
+PUSH1 0x04
+ADD                               // offset + 4 = 0x24
+CALLDATALOAD                      // Load length (8)
+
+// Load string bytes
+PUSH1 0x24
+CALLDATALOAD                      // Load "Ethereum"
+
+// Calculate storage slot
+CALLER                            // msg.sender
+PUSH1 0x00                        // mapping slot
+SHA3                              // keccak256(sender, 0)
+
+// Store string
+... (string storage logic)
+SSTORE                            // Store to storage
+```
+
+### 1.4 Gas: Where Every Wei Goes
+
+**Gas costs for `addSkill("Ethereum")`:**
+
+```
+Transaction base: 21,000 gas
+Calldata (4 + 3*32 bytes): 4*68 + 3*32*16 = 1,808 gas
+
+Execution:
+CALLER:         2 gas
+PUSH1:          3 gas
+SHA3:           30 gas + (6 gas per word)
+SLOAD:          2,100 gas (cold storage read)
+SSTORE:         20,000 gas (slot written from zero)
+
+Total: ~23,000 gas
+
+At 20 gwei gas price:
+23,000 * 20 * 10^-9 = 0.00046 ETH ≈ $1
+```
+
+**Why does SSTORE cost so much?**
+
+Because it permanently changes blockchain state!
+- Every full node must store this forever
+- Must be written to disk
+- Incentivizes efficient storage use
+
+**The SSTORE gas schedule (post-EIP-2200):**
+
+```
+If slot changes from zero to non-zero: 20,000 gas
+If slot changes from non-zero to zero: 5,000 gas refund
+If slot changes from non-zero to non-zero: 5,000 gas
+If slot is unchanged: 800 gas
+```
+
+### 1.5 The EVM Stack Machine
+
+**The EVM is a stack machine. What does this mean?**
+
+```
+Normal computers (x86):
+MOV EAX, 5     // Put 5 in register EAX
+MOV EBX, 10    // Put 10 in register EBX
+ADD EAX, EBX   // EAX = EAX + EBX = 15
+
+EVM:
+PUSH1 0x05     // Stack: [5]
+PUSH1 0x0A     // Stack: [10, 5]
+ADD            // Stack: [15]
+```
+
+**Stack rules:**
+- Maximum depth: 1024 items
+- Each item: 256 bits (32 bytes)
+- LIFO (Last In, First Out)
+- Stack underflow = immediate revert
+- Stack overflow = immediate revert
+
+**Example: Calculate (5 + 10) * 3**
+
+```
+PUSH1 0x05     // Stack: [5]
+PUSH1 0x0A     // Stack: [10, 5]
+ADD            // Stack: [15]
+PUSH1 0x03     // Stack: [3, 15]
+MUL            // Stack: [45]
+
+Result: 45
+```
+
+**Example: Swap top two stack items**
+
+```
+Before: [A, B, C, D]
+
+SWAP1          // Swap positions 0 and 1
+
+After:  [B, A, C, D]
+```
+
+**Example: Duplicate 3rd item**
+
+```
+Before: [A, B, C, D]
+
+DUP3           // Duplicate 3rd item (0-indexed)
+
+After:  [C, A, B, C, D]
+```
+
+### 1.6 Memory: The Temporary Workspace
+
+**Memory vs Storage:**
+
+```
+Memory:
+- Temporary (cleared after transaction)
+- Cheap (3 gas per word + quadratic expansion cost)
+- Word-addressable (32-byte chunks)
+- Infinite (but you pay for expansion)
+
+Storage:
+- Permanent (forever on blockchain)
+- Expensive (20,000 gas for new writes)
+- Slot-addressable (32-byte slots)
+- 2^256 slots available
+```
+
+**Memory expansion cost:**
+
+```
+Formula:
+memory_cost = (memory_size_words^2) / 512 + (3 * memory_size_words)
+
+Example: Expand from 0 to 64 bytes (2 words)
+cost = (2^2) / 512 + (3 * 2) = 6.008 ≈ 6 gas
+
+Example: Expand from 0 to 1024 bytes (32 words)
+cost = (32^2) / 512 + (3 * 32) = 2 + 96 = 98 gas
+
+Example: Expand from 0 to 10,000 bytes (313 words)
+cost = (313^2) / 512 + (3 * 313) = 191 + 939 = 1,130 gas
+```
+
+**Memory operations:**
+
+```
+MSTORE:
+PUSH1 0x42     // Value to store
+PUSH1 0x00     // Memory offset
+MSTORE         // memory[0:32] = 0x42
+
+MLOAD:
+PUSH1 0x00     // Memory offset
+MLOAD          // Stack: [0x42]
+
+MSTORE8:
+PUSH1 0xFF     // Byte to store
+PUSH1 0x00     // Memory offset
+MSTORE8        // memory[0] = 0xFF (only 1 byte)
+```
+
+### 1.7 Contract Creation in Detail
+
+**Creating a contract from a contract:**
+
+```solidity
+contract Factory {
+    function createChild() public returns (address) {
+        Child child = new Child();
+        return address(child);
+    }
+}
+
+contract Child {
+    uint public value = 42;
+}
+```
+
+**What happens internally:**
+
+```
+Factory.createChild() bytecode:
+
+// Calculate contract size
+PUSH1 0x60          // Size of Child runtime code
+DUP1                // Duplicate
+PUSH1 0x0C          // Offset of Child creation code
+PUSH1 0x00          // Memory destination
+CODECOPY            // Copy Child creation code to memory
+
+// CREATE opcode
+PUSH1 0x00          // Value (ETH to send)
+PUSH1 0x00          // Memory offset
+PUSH1 0x60          // Memory size
+CREATE              // Create new contract
+
+// CREATE does:
+// 1. Calculate address = keccak256(sender, sender.nonce)
+// 2. Increment sender.nonce
+// 3. Execute creation code from memory[offset:offset+size]
+// 4. Store returned code at new address
+// 5. Push address onto stack
+```
+
+**CREATE2 (deterministic addresses):**
+
+```
+CREATE2 allows you to predict the address before deployment!
+
+Address calculation:
+address = keccak256(0xff, sender, salt, keccak256(init_code))[12:]
+
+Example:
+sender = 0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb
+salt = 0x1234567890abcdef
+init_code = 0x608060...
+
+address = keccak256(
+  0xff742d35Cc6634C0532925a3b844Bc9e7595f0bEb1234567890abcdef<keccak256(init_code)>
+)[12:]
+```
+
+**Why is this powerful?**
+
+- Deploy same contract to same address on different chains
+- Pre-calculate addresses for counterfactual instantiation
+- Used in CREATE2 factories, wallets, etc.
+
+---
+
+## Chapter 2: Advanced EVM Concepts
+
+### 2.1 Delegatecall: The Proxy Pattern
+
+**The most important opcode for understanding proxies:**
+
+```solidity
+// Implementation contract
+contract Implementation {
+    uint public value;
+    
+    function setValue(uint _value) public {
+        value = _value;
+    }
+}
+
+// Proxy contract
+contract Proxy {
+    uint public value;  // Same storage layout!
+    address public implementation;
+    
+    fallback() external {
+        address impl = implementation;
+        assembly {
+            // Copy calldata
+            calldatacopy(0, 0, calldatasize())
+            
+            // Delegatecall to implementation
+            let result := delegatecall(
+                gas(),           // Forward all gas
+                impl,            // Call implementation
+                0,               // Input offset in memory
+                calldatasize(),  // Input size
+                0,               // Output offset
+                0                // Output size (we don't know it yet)
+            )
+            
+            // Copy return data
+            returndatacopy(0, 0, returndatasize())
+            
+            // Return or revert
+            switch result
+            case 0 { revert(0, returndatasize()) }
+            default { return(0, returndatasize()) }
+        }
+    }
+}
+```
+
+**What delegatecall does:**
+
+```
+Normal CALL:
+Contract A calls Contract B
+- msg.sender in B = A
+- Storage changes happen in B
+- B's code executes in B's context
+
+DELEGATECALL:
+Contract A delegatecalls Contract B
+- msg.sender in B = original msg.sender (preserved!)
+- Storage changes happen in A (not B!)
+- B's code executes in A's context
+```
+
+**The danger:**
+
+```solidity
+// Vulnerable proxy
+contract VulnerableProxy {
+    address public owner;           // Slot 0
+    address public implementation;  // Slot 1
+    
+    constructor(address _impl) {
+        owner = msg.sender;
+        implementation = _impl;
+    }
+    
+    fallback() external {
+        implementation.delegatecall(msg.data);
+    }
+}
+
+// Malicious implementation
+contract Malicious {
+    address public owner;  // Slot 0 - same as proxy!
+    
+    function pwn() public {
+        owner = msg.sender;  // Overwrites proxy's owner!
+    }
+}
+
+// Attack:
+// 1. Deploy Malicious
+// 2. VulnerableProxy.fallback() with calldata = Malicious.pwn()
+// 3. delegatecall executes Malicious.pwn() in proxy's context
+// 4. owner in slot 0 of proxy is overwritten
+// 5. Attacker now owns proxy!
+```
+
+**The fix (OpenZeppelin ERC1967):**
+
+```solidity
+// Store implementation at special slot
+bytes32 private constant IMPLEMENTATION_SLOT = 
+    bytes32(uint256(keccak256('eip1967.proxy.implementation')) - 1);
+
+function _setImplementation(address newImpl) private {
+    assembly {
+        sstore(IMPLEMENTATION_SLOT, newImpl)
+    }
+}
+
+function _implementation() internal view returns (address impl) {
+    assembly {
+        impl := sload(IMPLEMENTATION_SLOT)
+    }
+}
+```
+
+**Why does this work?**
+
+The implementation address is stored at:
+```
+slot = keccak256('eip1967.proxy.implementation') - 1
+     = 0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc
+```
+
+This slot is:
+- Astronomically unlikely to collide with normal storage
+- Doesn't conflict with implementation contract's storage layout
+
+### 2.2 Precompiled Contracts
+
+**The EVM has 9 special contracts at fixed addresses:**
+
+```
+0x01: ecRecover       - Recover signer from signature
+0x02: SHA256          - SHA-256 hash
+0x03: RIPEMD160       - RIPEMD-160 hash
+0x04: identity        - Copy data
+0x05: modexp          - Modular exponentiation
+0x06: ecAdd           - Elliptic curve addition (BN256)
+0x07: ecMul           - Elliptic curve multiplication (BN256)
+0x08: ecPairing       - Elliptic curve pairing (BN256)
+0x09: blake2f         - BLAKE2b hash
+```
+
+**Example: ecRecover (signature verification)**
+
+```solidity
+function verifySignature(
+    bytes32 hash,
+    uint8 v,
+    bytes32 r,
+    bytes32 s
+) public pure returns (address) {
+    return ecrecover(hash, v, r, s);
+}
+
+// What happens:
+// 1. Pack inputs: hash || v || r || s
+// 2. CALL to address 0x01
+// 3. Precompiled contract executes (in C++, not EVM!)
+// 4. Returns recovered address
+```
+
+**Under the hood (in the client):**
+
+```cpp
+// geth implementation (simplified)
+case 0x01: // ecRecover
+    // Parse input
+    hash = input[0:32]
+    v = input[32:64]
+    r = input[64:96]
+    s = input[96:128]
+    
+    // Recover public key from signature
+    pubkey = secp256k1_recover(hash, v, r, s)
+    
+    // Convert to address
+    address = keccak256(pubkey)[12:]
+    
+    return address
+```
+
+**Gas costs:**
+
+```
+ecRecover:  3,000 gas
+SHA256:     60 gas + 12 gas per word
+RIPEMD160:  600 gas + 120 gas per word
+identity:   15 gas + 3 gas per word
+modexp:     (complex formula based on input size)
+ecAdd:      150 gas
+ecMul:      6,000 gas
+ecPairing:  45,000 gas + 34,000 gas per point
+blake2f:    (based on rounds)
+```
+
+### 2.3 EVM Execution Model in Complete Detail
+
+**When a transaction executes:**
+
+```
+1. Transaction Validation
+   ├─ Signature valid?
+   ├─ Nonce correct?
+   ├─ Balance >= gas * gasPrice + value?
+   └─ Gas limit <= block gas limit?
+
+2. Pre-execution
+   ├─ Deduct gas cost: balance -= gasLimit * gasPrice
+   ├─ Increment nonce: nonce++
+   └─ If contract creation: generate address
+
+3. EVM Initialization
+   ├─ Create execution context:
+   │  ├─ pc = 0 (program counter)
+   │  ├─ stack = []
+   │  ├─ memory = []
+   │  ├─ gas = gasLimit
+   │  ├─ code = bytecode
+   │  └─ calldata = tx.data
+   └─ Initialize access lists (EIP-2929/2930)
+
+4. Execution Loop
+   while pc < code.length and gas > 0:
+       opcode = code[pc]
+       
+       // Check gas
+       if gas < gasCost(opcode):
+           revert()  // Out of gas
+       
+       // Execute opcode
+       execute(opcode)
+       gas -= gasCost(opcode)
+       
+       // Update pc
+       if opcode not in [JUMP, JUMPI, RETURN, REVERT, STOP]:
+           pc++
+
+5. Post-execution
+   ├─ If reverted:
+   │  ├─ Revert all state changes
+   │  └─ Refund 0 gas
+   └─ If succeeded:
+      ├─ Apply state changes
+      ├─ Calculate gas refund
+      └─ Refund: min(gasUsed / 5, gasRefund)
+
+6. Finalization
+   ├─ gasUsed = gasLimit - gas - refund
+   ├─ Refund: balance += (gas + refund) * gasPrice
+   └─ Miner gets: gasUsed * gasPrice
+```
+
+**Concrete example: Transfer 1 ETH**
+
+```
+Transaction:
+{
+    from: Alice (0xAlice)
+    to: Bob (0xBob)
+    value: 1 ETH
+    data: 0x
+    gas: 21000
+    gasPrice: 20 gwei
+}
+
+Execution:
+1. Validation:
+   Alice.balance = 5 ETH ✓
+   21000 * 20 gwei = 0.00042 ETH
+   5 ETH >= 1 + 0.00042 ETH ✓
+
+2. Pre-execution:
+   Alice.balance -= 21000 * 20 gwei = 4.99958 ETH
+   Alice.nonce++ (now 1)
+
+3. EVM execution:
+   (no code to execute, just transfer)
+   Bob.balance += 1 ETH
+
+4. Post-execution:
+   gasUsed = 21000
+   gasRefund = 0
+
+5. Finalization:
+   Miner gets: 21000 * 20 gwei = 0.00042 ETH
+   
+   Final state:
+   Alice.balance = 4.99958 ETH
+   Bob.balance += 1 ETH
+   Miner.balance += 0.00042 ETH
+```
+
+### 2.4 The SLOAD/SSTORE Conundrum
+
+**Post-Berlin (EIP-2929), storage access is more complex:**
+
+```
+Cold access (first time in tx): 2,100 gas
+Warm access (subsequent): 100 gas
+
+This creates interesting patterns:
+
+// Expensive
+function badPattern() external {
+    uint a = storageVar;    // 2,100 gas (cold)
+    // ... do stuff ...
+    uint b = storageVar;    // 100 gas (warm)
+    // ... do stuff ...
+    uint c = storageVar;    // 100 gas (warm)
+}
+
+// Better
+function goodPattern() external {
+    uint cached = storageVar;  // 2,100 gas (cold)
+    // Use cached instead of storageVar
+    uint a = cached;
+    uint b = cached;
+    uint c = cached;
+}
+
+Savings: 2,100 - 100 - 100 = 1,900 gas!
+```
+
+**SSTORE refunds:**
+
+```
+Original (pre-EIP-3529):
+- Set to zero: 15,000 gas refund
+- Maximum refund: 50% of gas used
+
+Current (post-EIP-3529):
+- Set to zero: 4,800 gas refund
+- Maximum refund: 20% of gas used
+
+Why the change?
+Gas tokens exploited refunds to:
+1. SSTORE zeros when gas cheap
+2. Delete when gas expensive
+3. Get huge refunds
+4. Effectively front-run the gas market
+```
+
+---
+
+## Chapter 3: Bytecode Disassembly Deep Dive
+
+### 3.1 From Bytecode to Meaningful Operations
+
+**Your d_tuft tool converts bytecode to opcodes. Now let's go deeper:**
+
+```
+Bytecode: 0x608060405234801561001057600080fd5b5061012f806100206000396000f3
+
+Step-by-step disassembly:
+
+Offset  Bytecode    Opcode          Operand         Explanation
+------  --------    ------          -------         -----------
+0x00    60          PUSH1           0x80            Push free memory pointer
+0x02    60          PUSH1           0x40            Memory location 0x40
+0x04    52          MSTORE          -               Store 0x80 at 0x40
+
+0x05    34          CALLVALUE       -               Get msg.value
+0x06    80          DUP1            -               Duplicate it
+0x07    15          ISZERO          -               Is it zero?
+0x08    61          PUSH2           0x0010          Jump destination
+0x0B    57          JUMPI           -               Jump if no ETH sent
+
+0x0C    60          PUSH1           0x00            Push 0
+0x0E    80          DUP1            -               Duplicate
+0x0F    FD          REVERT          -               Revert (non-payable)
+
+0x10    5B          JUMPDEST        -               Valid jump target
+0x11    50          POP             -               Clean stack
+
+0x12    61          PUSH2           0x012f          Runtime code size
+0x15    80          DUP1            -               Duplicate
+0x16    61          PUSH2           0x0020          Offset of runtime code
+0x19    60          PUSH1           0x00            Destination in memory
+0x1B    39          CODECOPY        -               Copy runtime to memory
+
+0x1C    60          PUSH1           0x00            Offset 0
+0x1E    F3          RETURN          -               Return runtime bytecode
+```
+
+### 3.2 Patterns in Compiled Solidity
+
+**The Solidity compiler (solc) produces predictable patterns:**
+
+**Pattern 1: Free Memory Pointer**
+```
+ALWAYS at the beginning:
+PUSH1 0x80    // Initial free memory pointer value
+PUSH1 0x40    // Slot for free memory pointer
+MSTORE        // memory[0x40] = 0x80
+
+Why 0x80? 
+- 0x00-0x3f: Scratch space for hashing
+- 0x40-0x5f: Free memory pointer
+- 0x60-0x7f: Zero slot
+- 0x80+: Actual free memory
+```
+
+**Pattern 2: Function Dispatcher**
+```solidity
+contract Example {
+    function foo() public { }
+    function bar(uint x) public { }
+}
+```
+
+```
+Compiled dispatcher:
+
+CALLDATALOAD 0    // Load first 32 bytes
+PUSH1 0xe0
+SHR               // Shift right 224 bits → first 4 bytes
+
+DUP1
+PUSH4 0xc2985578  // keccak256("foo()")[0:4]
+EQ
+PUSH2 0x0042      // foo() entry point
+JUMPI
+
+DUP1
+PUSH4 0x0dbe671f  // keccak256("bar(uint256)")[0:4]
+EQ
+PUSH2 0x0058      // bar(uint256) entry point
+JUMPI
+
+// No match → fallback or revert
+PUSH1 0x00
+DUP1
+REVERT
+```
+
+**Pattern 3: ABI Decoding**
+```solidity
+function transfer(address to, uint256 amount) public
+```
+
+```
+// Check calldata size
+CALLDATASIZE
+PUSH1 0x44        // 4 bytes selector + 32 bytes address + 32 bytes uint
+LT
+PUSH2 revert_loc
+JUMPI
+
+// Load 'to' parameter
+PUSH1 0x04        // Skip selector
+CALLDATALOAD
+PUSH20 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+AND               // Mask to 20 bytes (address type)
+
+// Load 'amount' parameter
+PUSH1 0x24        // 4 + 32 = 0x24
+CALLDATALOAD
+```
+
+**Pattern 4: Checked Arithmetic (Solidity 0.8+)**
+```solidity
+uint a = b + c;  // In Solidity 0.8+
+```
+
+```
+// Old (pre-0.8): unchecked
+ADD               // Just add, overflow wraps
+
+// New (0.8+): checked
+DUP2              // Duplicate b
+DUP2              // Duplicate c  
+ADD               // a = b + c
+DUP1              // Duplicate result
+DUP3              // Duplicate b
+GT                // result > b? (overflow check)
+PUSH2 panic_loc   // Panic destination
+JUMPI             // Panic if overflow!
+```
+
+### 3.3 Reverse Engineering Unknown Contracts
+
+**Real-world example: Decompiling a deployed contract**
+
+```
+Address: 0xdAC17F958D2ee523a2206206994597C13D831ec7 (USDT)
+
+Step 1: Fetch bytecode
+const bytecode = await provider.getCode(address);
+
+Step 2: Identify patterns
+- Function dispatcher at beginning ✓
+- Proxy pattern? No (no DELEGATECALL)
+- Upgradeable? No (no SSTORE to implementation slot)
+
+Step 3: Extract function selectors
+0xa9059cbb → transfer(address,uint256)
+0x23b872dd → transferFrom(address,address,uint256)
+0x095ea7b3 → approve(address,uint256)
+0xdd62ed3e → allowance(address,address)
+0x70a08231 → balanceOf(address)
+
+Step 4: Trace execution paths
+```
+
+### 3.4 Building Your Own Disassembler
+
+**Extending d_tuft for analysis:**
+
+```typescript
+interface DisassembledInstruction {
+    offset: number;
+    opcode: string;
+    operand?: bigint;
+    operandBytes?: number;
+    raw: string;
+}
+
+interface BasicBlock {
+    start: number;
+    end: number;
+    instructions: DisassembledInstruction[];
+    successors: number[];    // Possible next blocks
+    predecessors: number[];  // Blocks that can reach this
+    type: 'normal' | 'branch' | 'terminal';
+}
+
+function buildBasicBlocks(instructions: DisassembledInstruction[]): BasicBlock[] {
+    const blocks: BasicBlock[] = [];
+    const leaders = new Set<number>();
+    
+    // Step 1: Find leaders (block starts)
+    leaders.add(0);  // First instruction is always a leader
+    
+    for (const instr of instructions) {
+        if (instr.opcode === 'JUMP' || instr.opcode === 'JUMPI') {
+            // Target of jump is a leader (if we know it)
+            if (instr.operand !== undefined) {
+                leaders.add(Number(instr.operand));
+            }
+            // Instruction after jump is a leader
+            leaders.add(instr.offset + 1 + (instr.operandBytes || 0));
+        }
+        if (instr.opcode === 'JUMPDEST') {
+            leaders.add(instr.offset);
+        }
+    }
+    
+    // Step 2: Build blocks between leaders
+    const sortedLeaders = [...leaders].sort((a, b) => a - b);
+    
+    for (let i = 0; i < sortedLeaders.length; i++) {
+        const start = sortedLeaders[i];
+        const end = sortedLeaders[i + 1] ?? Infinity;
+        
+        const blockInstructions = instructions.filter(
+            instr => instr.offset >= start && instr.offset < end
+        );
+        
+        if (blockInstructions.length === 0) continue;
+        
+        const lastInstr = blockInstructions[blockInstructions.length - 1];
+        
+        blocks.push({
+            start,
+            end: lastInstr.offset + 1 + (lastInstr.operandBytes || 0),
+            instructions: blockInstructions,
+            successors: computeSuccessors(lastInstr, sortedLeaders[i + 1]),
+            predecessors: [],  // Filled in later
+            type: classifyBlock(lastInstr)
+        });
+    }
+    
+    // Step 3: Compute predecessors
+    for (const block of blocks) {
+        for (const succ of block.successors) {
+            const succBlock = blocks.find(b => b.start === succ);
+            if (succBlock) {
+                succBlock.predecessors.push(block.start);
+            }
+        }
+    }
+    
+    return blocks;
+}
+```
+
+---
+
+## Chapter 4: Control Flow Graphs
+
+### 4.1 What is a Control Flow Graph?
+
+**Definition:**
+A Control Flow Graph (CFG) is a directed graph where:
+- Nodes = Basic blocks (sequences of instructions with single entry/exit)
+- Edges = Possible control flow between blocks
+
+```
+Example:
+
+function max(uint a, uint b) public pure returns (uint) {
+    if (a > b) {
+        return a;
+    } else {
+        return b;
+    }
+}
+
+CFG:
+                    ┌─────────────┐
+                    │   Entry     │
+                    │  Load a, b  │
+                    └──────┬──────┘
+                           │
+                    ┌──────▼──────┐
+                    │   a > b?    │
+                    └──────┬──────┘
+                      ╱          ╲
+                   true        false
+                    ╱              ╲
+         ┌─────────▼─┐        ┌────▼────────┐
+         │  return a │        │  return b   │
+         └───────────┘        └─────────────┘
+```
+
+### 4.2 Building CFGs from EVM Bytecode
+
+**Challenges with EVM:**
+
+1. **Dynamic jumps:**
+```
+PUSH2 var      // Variable pushed earlier
+JUMP           // Where does this go?
+```
+
+2. **Stack-based targets:**
+```
+// The JUMP target isn't visible in the instruction!
+// It's somewhere on the stack from earlier computation
+```
+
+**Solution: Abstract interpretation for jump targets**
+
+```typescript
+interface StackAbstraction {
+    // For each stack position, track possible values
+    slots: (bigint | 'unknown')[];
+}
+
+function abstractInterpret(
+    block: BasicBlock,
+    entryStack: StackAbstraction
+): { exitStack: StackAbstraction; jumpTargets: bigint[] } {
+    let stack = { slots: [...entryStack.slots] };
+    const jumpTargets: bigint[] = [];
+    
+    for (const instr of block.instructions) {
+        switch (instr.opcode) {
+            case 'PUSH1':
+            case 'PUSH2':
+            // ... PUSH32
+                stack.slots.push(instr.operand!);
+                break;
+            
+            case 'POP':
+                stack.slots.pop();
+                break;
+            
+            case 'DUP1':
+                stack.slots.push(stack.slots[stack.slots.length - 1]);
+                break;
+            
+            case 'ADD':
+                const b = stack.slots.pop();
+                const a = stack.slots.pop();
+                if (typeof a === 'bigint' && typeof b === 'bigint') {
+                    stack.slots.push(a + b);
+                } else {
+                    stack.slots.push('unknown');
+                }
+                break;
+            
+            case 'JUMP':
+            case 'JUMPI':
+                const target = stack.slots.pop();
+                if (typeof target === 'bigint') {
+                    jumpTargets.push(target);
+                }
+                // For JUMPI, we might fall through too
+                break;
+            
+            // ... other opcodes
+        }
+    }
+    
+    return { exitStack: stack, jumpTargets };
+}
+```
+
+### 4.3 CFG Visualization
+
+**Generate DOT format for Graphviz:**
+
+```typescript
+function cfgToDot(blocks: BasicBlock[]): string {
+    let dot = 'digraph CFG {\n';
+    dot += '  node [shape=box, fontname="Courier"];\n';
+    
+    for (const block of blocks) {
+        // Node content
+        const label = block.instructions
+            .map(i => `${i.offset.toString(16).padStart(4, '0')}: ${i.opcode}`)
+            .join('\\n');
+        
+        // Node styling based on type
+        let style = '';
+        if (block.type === 'terminal') {
+            style = ', color=red';
+        } else if (block.type === 'branch') {
+            style = ', color=blue';
+        }
+        
+        dot += `  block_${block.start} [label="${label}"${style}];\n`;
+        
+        // Edges
+        for (const succ of block.successors) {
+            dot += `  block_${block.start} -> block_${succ};\n`;
+        }
+    }
+    
+    dot += '}\n';
+    return dot;
+}
+```
+
+### 4.4 Dominator Trees
+
+**Definition:**
+Block A dominates block B if every path from entry to B goes through A.
+
+**Why it matters:**
+- Loop detection (back edges in dominator tree)
+- Optimization opportunities
+- Security: finding unavoidable checks
+
+```typescript
+function computeDominators(blocks: BasicBlock[], entry: number): Map<number, Set<number>> {
+    const dominators = new Map<number, Set<number>>();
+    
+    // Initialize: entry dominates only itself
+    dominators.set(entry, new Set([entry]));
+    
+    // All others: dominated by everyone initially
+    const allBlocks = new Set(blocks.map(b => b.start));
+    for (const block of blocks) {
+        if (block.start !== entry) {
+            dominators.set(block.start, new Set(allBlocks));
+        }
+    }
+    
+    // Fixed-point iteration
+    let changed = true;
+    while (changed) {
+        changed = false;
+        
+        for (const block of blocks) {
+            if (block.start === entry) continue;
+            
+            // Dom(B) = {B} ∪ (∩ Dom(P) for all predecessors P)
+            const predDoms = block.predecessors.map(p => dominators.get(p)!);
+            const intersection = predDoms.reduce(
+                (acc, dom) => new Set([...acc].filter(x => dom.has(x))),
+                allBlocks
+            );
+            intersection.add(block.start);
+            
+            if (!setsEqual(dominators.get(block.start)!, intersection)) {
+                dominators.set(block.start, intersection);
+                changed = true;
+            }
+        }
+    }
+    
+    return dominators;
+}
+```
+
+---
+
+## Chapter 5: Data Flow Analysis
+
+### 5.1 What is Data Flow Analysis?
+
+**Definition:**
+Track how data flows through a program to answer questions like:
+- Where does this value come from?
+- Where is this value used?
+- Can this value be tainted (attacker-controlled)?
+
+### 5.2 Reaching Definitions
+
+**For each program point, which assignments can reach it?**
+
+```solidity
+function example(uint x) public pure returns (uint) {
+    uint y = x + 1;    // def: y = x + 1
+    uint z = y * 2;    // def: z = y * 2
+    if (x > 10) {
+        y = 100;       // def: y = 100
+    }
+    return y + z;      // which y? which z?
+}
+```
+
+**Reaching definitions at return:**
+- z: only one definition (z = y * 2)
+- y: TWO possible definitions (y = x + 1 OR y = 100)
+
+```typescript
+interface Definition {
+    variable: string;
+    block: number;
+    instruction: number;
+}
+
+function reachingDefinitions(cfg: BasicBlock[]): Map<number, Set<Definition>> {
+    const reaching = new Map<number, Set<Definition>>();
+    
+    // GEN[B]: definitions generated in B
+    // KILL[B]: definitions killed in B
+    const gen = new Map<number, Set<Definition>>();
+    const kill = new Map<number, Set<Definition>>();
+    
+    // Initialize GEN and KILL
+    for (const block of cfg) {
+        const genSet = new Set<Definition>();
+        const killSet = new Set<Definition>();
+        
+        for (let i = 0; i < block.instructions.length; i++) {
+            const instr = block.instructions[i];
+            if (isDefinition(instr)) {
+                const variable = getDefinedVariable(instr);
+                // Kill all other definitions of this variable
+                for (const def of findAllDefsOf(cfg, variable)) {
+                    killSet.add(def);
+                }
+                // Generate this definition
+                genSet.add({ variable, block: block.start, instruction: i });
+            }
+        }
+        
+        gen.set(block.start, genSet);
+        kill.set(block.start, killSet);
+        reaching.set(block.start, new Set());
+    }
+    
+    // Fixed-point iteration
+    // REACH[B] = GEN[B] ∪ (∪ REACH[P] - KILL[B] for all predecessors P)
+    let changed = true;
+    while (changed) {
+        changed = false;
+        
+        for (const block of cfg) {
+            // Union of all predecessors' reaching defs
+            const inReach = new Set<Definition>();
+            for (const pred of block.predecessors) {
+                for (const def of reaching.get(pred)!) {
+                    if (!kill.get(block.start)!.has(def)) {
+                        inReach.add(def);
+                    }
+                }
+            }
+            
+            // Add GEN
+            for (const def of gen.get(block.start)!) {
+                inReach.add(def);
+            }
+            
+            if (!setsEqual(reaching.get(block.start)!, inReach)) {
+                reaching.set(block.start, inReach);
+                changed = true;
+            }
+        }
+    }
+    
+    return reaching;
+}
+```
+
+### 5.3 Taint Analysis
+
+**The most important analysis for security!**
+
+**Taint sources (attacker-controlled):**
+- msg.sender
+- msg.value
+- tx.origin
+- calldata
+- External call return values
+- block.timestamp, block.number (manipulatable)
+
+**Taint sinks (dangerous if tainted):**
+- CALL/DELEGATECALL target
+- SSTORE key/value
+- Return/Revert data
+- Array indices
+
+```typescript
+type TaintLevel = 'clean' | 'tainted' | 'maybe';
+
+interface TaintState {
+    stack: TaintLevel[];
+    memory: Map<bigint, TaintLevel>;
+    storage: Map<bigint, TaintLevel>;
+}
+
+function propagateTaint(
+    state: TaintState,
+    instruction: DisassembledInstruction
+): TaintState {
+    const newState = cloneTaintState(state);
+    
+    switch (instruction.opcode) {
+        case 'CALLER':
+        case 'ORIGIN':
+        case 'CALLVALUE':
+        case 'CALLDATALOAD':
+        case 'CALLDATASIZE':
+        case 'TIMESTAMP':
+        case 'NUMBER':
+            // These are taint sources!
+            newState.stack.push('tainted');
+            break;
+        
+        case 'ADD':
+        case 'SUB':
+        case 'MUL':
+        case 'DIV':
+            // Taint propagates through arithmetic
+            const b = newState.stack.pop()!;
+            const a = newState.stack.pop()!;
+            // If either operand is tainted, result is tainted
+            newState.stack.push(
+                (a === 'tainted' || b === 'tainted') ? 'tainted' : 'clean'
+            );
+            break;
+        
+        case 'MLOAD':
+            const mOffset = newState.stack.pop()!;
+            // Conservative: if offset is tainted, result is tainted
+            if (mOffset === 'tainted') {
+                newState.stack.push('tainted');
+            } else {
+                // Look up in memory
+                const memTaint = newState.memory.get(/* concrete offset */) || 'clean';
+                newState.stack.push(memTaint);
+            }
+            break;
+        
+        case 'SLOAD':
+            const sKey = newState.stack.pop()!;
+            // Storage reads are potentially tainted (could be set by anyone)
+            newState.stack.push('maybe');
+            break;
+        
+        case 'CALL':
+        case 'DELEGATECALL':
+            // Check if target address is tainted!
+            const target = state.stack[state.stack.length - 2];
+            if (target === 'tainted') {
+                reportVulnerability('TAINTED_CALL_TARGET', instruction);
+            }
+            // ... handle call
+            break;
+        
+        // ... more opcodes
+    }
+    
+    return newState;
+}
+```
+
+### 5.4 Finding Security Vulnerabilities with Data Flow
+
+**Pattern: Reentrancy Detection**
+
+```typescript
+function detectReentrancy(cfg: BasicBlock[], taintAnalysis: TaintState[]) {
+    for (const block of cfg) {
+        for (let i = 0; i < block.instructions.length; i++) {
+            const instr = block.instructions[i];
+            
+            // Found a CALL
+            if (instr.opcode === 'CALL') {
+                // Check: is there an SSTORE after this CALL?
+                const sStoreAfter = findSStoreAfter(cfg, block, i);
+                
+                if (sStoreAfter) {
+                    // Check: does the SSTORE key/value depend on state before CALL?
+                    const storeKey = getStackAt(sStoreAfter, 0);
+                    const storeValue = getStackAt(sStoreAfter, 1);
+                    
+                    // This is classic reentrancy!
+                    reportVulnerability('REENTRANCY', {
+                        call: instr,
+                        store: sStoreAfter,
+                        description: 'State update after external call'
+                    });
+                }
+            }
+        }
+    }
+}
+```
+
+**Pattern: Integer Overflow Detection**
+
+```typescript
+function detectOverflow(cfg: BasicBlock[], taintAnalysis: TaintState[]) {
+    for (const block of cfg) {
+        for (let i = 0; i < block.instructions.length; i++) {
+            const instr = block.instructions[i];
+            
+            if (instr.opcode === 'ADD' || instr.opcode === 'MUL') {
+                const taint = taintAnalysis[block.start];
+                const operandTaints = [
+                    taint.stack[taint.stack.length - 1],
+                    taint.stack[taint.stack.length - 2]
+                ];
+                
+                // If either operand is tainted, overflow is possible
+                if (operandTaints.some(t => t === 'tainted')) {
+                    // Check: is there an overflow check after this?
+                    if (!hasOverflowCheck(cfg, block, i)) {
+                        reportVulnerability('POTENTIAL_OVERFLOW', instr);
+                    }
+                }
+            }
+        }
+    }
+}
+```
+
+---
+
+## Chapter 6: The Security Researcher's Toolkit
+
+### 6.1 Essential Skills Checklist
+
+**By now you should understand:**
+
+- [ ] How the EVM executes bytecode
+- [ ] Stack machine architecture
+- [ ] Memory vs storage vs calldata
+- [ ] Gas mechanics and optimization
+- [ ] Function dispatch mechanism
+- [ ] Storage layout and slot calculation
+- [ ] DELEGATECALL and proxy patterns
+- [ ] Bytecode disassembly
+- [ ] Control flow graphs
+- [ ] Data flow analysis
+- [ ] Taint analysis
+
+### 6.2 Real Vulnerability Analysis
+
+**Case Study: The DAO Hack (2016)**
+
+```solidity
+// Simplified DAO withdrawal function
+function withdraw() public {
+    uint amount = balances[msg.sender];
+    
+    // BUG: External call BEFORE state update!
+    msg.sender.call{value: amount}("");
+    
+    // Attacker can re-enter and withdraw again
+    // because balance is still non-zero!
+    balances[msg.sender] = 0;
+}
+
+// Attacker contract
+contract Attacker {
+    DAO dao;
+    
+    fallback() external payable {
+        // Re-enter!
+        if (address(dao).balance > 0) {
+            dao.withdraw();  // Called again before balance is zeroed
+        }
+    }
+    
+    function attack() external payable {
+        dao.deposit{value: 1 ether}();
+        dao.withdraw();
+    }
+}
+```
+
+**Analysis with our tools:**
+
+```
+1. CFG shows CALL before SSTORE
+2. Taint analysis shows balances[msg.sender] flows to call value
+3. Data flow shows SSTORE depends on pre-CALL state
+
+VERDICT: REENTRANCY VULNERABILITY
+```
+
+### 6.3 Practice Exercises
+
+**Exercise 1: Analyze this bytecode**
+```
+6080604052348015600f57600080fd5b5060043610603c5760003560e01c8063
+371303c01460415780638da5cb5b14605f575b600080fd5b60476075565b6040
+5160209091018051517f000000000000000000000000000000000000000000
+```
+
+1. What does this contract do?
+2. Find the function selectors
+3. Build the CFG
+4. Identify any vulnerabilities
+
+**Exercise 2: Implement missing opcode handlers**
+```typescript
+// Implement these opcode handlers:
+function handleSHR(state: SymbolicState): void { /* TODO */ }
+function handleSAR(state: SymbolicState): void { /* TODO */ }
+function handleSHL(state: SymbolicState): void { /* TODO */ }
+```
+
+**Exercise 3: Find the bug**
+```solidity
+contract BuggyToken {
+    mapping(address => uint) public balances;
+    
+    function transfer(address to, uint amount) public {
+        balances[msg.sender] -= amount;
+        balances[to] += amount;
+    }
+}
+```
+
+What's wrong? How would your analysis tools detect it?
+
+---
+
+*This completes Part 1: Foundations. You now have the deep EVM knowledge needed to build a production symbolic execution engine.*
+
+**Next: Part 2 - Symbolic Execution Theory**
+- Mathematical foundations
+- Constraint solving
+- Path exploration strategies
+- Handling loops and external calls

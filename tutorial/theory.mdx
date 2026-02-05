@@ -1,0 +1,1801 @@
+# THE COMPLETE SMART CONTRACT SECURITY MASTERCLASS
+## PART II: SYMBOLIC EXECUTION - THEORY AND MATHEMATICS
+
+### Understanding Symbolic Execution from First Principles
+*Building the theoretical foundation for our production engine*
+
+---
+
+# Chapter 3: What is Symbolic Execution?
+
+## 3.1 The Fundamental Insight
+
+**Traditional testing:**
+```javascript
+function transfer(uint amount) {
+    require(balance >= amount);  // Check 1
+    balance -= amount;           // Update
+}
+
+// Test with concrete values
+transfer(100);  // Tests ONE execution path
+transfer(50);   // Tests ONE execution path
+transfer(0);    // Tests ONE execution path
+```
+
+**How many tests do we need?**
+- Infinite! `amount` can be any of 2^256 values
+- We can never test all paths
+
+**Symbolic execution:**
+```javascript
+// amount is SYMBOLIC (represents ALL possible values)
+let amount = Symbol('amount');
+let balance = Symbol('balance');
+
+// Execute symbolically
+if (balance >= amount) {  // Don't evaluate! Create constraint
+    // Path constraint: balance >= amount
+    balance = balance - amount;
+}
+```
+
+**Result:** One execution explores ALL possible values simultaneously!
+
+## 3.2 The Mathematics of Symbolic Execution
+
+### Symbolic Values
+
+**Definition:**
+A symbolic value represents a set of concrete values through constraints.
+
+```
+Concrete value:    x = 5
+Symbolic value:    x = Symbol('x') with constraints [x > 0, x < 10]
+
+The symbolic value represents the SET: {1, 2, 3, 4, 5, 6, 7, 8, 9}
+```
+
+**Formal definition:**
+```
+A symbolic value is a tuple (name, τ, C) where:
+- name ∈ String (identifier)
+- τ ∈ Type (e.g., uint256, address, bool)
+- C: Constraint[] (set of constraints)
+
+The concretization function γ maps symbolic values to concrete sets:
+γ((name, τ, C)) = {v ∈ τ | ∀c ∈ C: c(v) = true}
+```
+
+**Example:**
+```
+name = "x"
+τ = uint256
+C = [x > 100, x < 200, x % 2 == 0]
+
+γ((x, uint256, C)) = {102, 104, 106, ..., 198}
+```
+
+### Symbolic Expressions
+
+**Definition:**
+Symbolic expressions are built from symbolic values using operators.
+
+```
+expr ::= value                    (symbolic or concrete value)
+       | expr op expr             (binary operation)
+       | unary_op expr            (unary operation)
+       | function(expr, ...)      (function call)
+
+where:
+op ∈ {+, -, *, /, %, &, |, ^, <<, >>}
+unary_op ∈ {-, !, ~}
+```
+
+**Example:**
+```
+x = Symbol('x')
+y = Symbol('y')
+
+Expression: x + 2*y - 5
+
+AST (Abstract Syntax Tree):
+      SUB
+     /   \
+   ADD    5
+  /   \
+ x    MUL
+      /  \
+     2    y
+```
+
+**Evaluation:**
+```
+Given constraints:
+x = 10
+y = 3
+
+Concrete evaluation:
+10 + 2*3 - 5 = 10 + 6 - 5 = 11
+
+Symbolic evaluation:
+((x + (2 * y)) - 5) with constraints [x = 10, y = 3]
+```
+
+### Path Constraints
+
+**Definition:**
+A path constraint is a conjunction of conditions encountered along an execution path.
+
+```
+Path constraint: ψ = c₁ ∧ c₂ ∧ ... ∧ cₙ
+
+where each cᵢ is a condition (boolean expression)
+```
+
+**Example:**
+```solidity
+function complex(uint x, uint y) public {
+    if (x > 10) {           // c₁: x > 10
+        if (y < 5) {        // c₂: y < 5
+            // Path constraint: (x > 10) ∧ (y < 5)
+            vulnerable();
+        }
+    }
+}
+
+Paths:
+1. x ≤ 10                    (fall through)
+2. (x > 10) ∧ (y ≥ 5)       (first if, second else)
+3. (x > 10) ∧ (y < 5)       (both ifs)
+```
+
+**Path explosion:**
+```
+Number of paths ≤ 2^n where n = number of branches
+
+function manyBranches(uint x) {
+    if (x > 1) { }     // 2 paths
+    if (x > 2) { }     // 2 paths → 4 total
+    if (x > 3) { }     // 2 paths → 8 total
+    if (x > 4) { }     // 2 paths → 16 total
+    ...
+    if (x > 20) { }    // 2^20 = 1,048,576 paths!
+}
+
+This is the path explosion problem.
+```
+
+### Constraint Satisfaction
+
+**Definition:**
+Given a path constraint ψ, find concrete values that satisfy it.
+
+**This is a constraint satisfaction problem (CSP):**
+```
+Find: valuation σ: Variables → Values
+Such that: ψ(σ) = true
+
+Example:
+ψ = (x > 10) ∧ (x < 20) ∧ (x % 2 == 0)
+
+Solutions (partial):
+σ₁ = {x ↦ 12}  ✓
+σ₂ = {x ↦ 14}  ✓
+σ₃ = {x ↦ 16}  ✓
+σ₄ = {x ↦ 10}  ✗ (violates x > 10)
+σ₅ = {x ↦ 20}  ✗ (violates x < 20)
+```
+
+**Satisfiability Modulo Theories (SMT):**
+```
+An SMT solver decides satisfiability of formulas in various theories:
+
+Theories:
+- QF_BV: Quantifier-Free Bit-Vectors (perfect for uint256!)
+- QF_UFBV: + Uninterpreted Functions
+- QF_ABV: + Arrays (perfect for memory/storage!)
+
+Example formula in SMT-LIB format:
+(declare-const x (_ BitVec 256))
+(assert (bvugt x #x000000000000000a))  ; x > 10
+(assert (bvult x #x0000000000000014))  ; x < 20
+(assert (= (bvurem x #x02) #x00))      ; x % 2 == 0
+(check-sat)  ; sat
+(get-model)  ; x = 12 (one possible solution)
+```
+
+## 3.3 Symbolic Execution Algorithm
+
+### Basic Algorithm
+
+```
+function SymbolicExecute(program, initialState):
+    worklist = [initialState]
+    results = []
+    
+    while worklist not empty:
+        state = worklist.pop()
+        
+        if state.pc >= len(program):
+            results.append(state)  // Completed path
+            continue
+        
+        instruction = program[state.pc]
+        
+        if instruction is branch:
+            // Fork execution
+            (trueState, falseState) = Fork(state, instruction)
+            
+            if Satisfiable(trueState.constraints):
+                worklist.add(trueState)
+            
+            if Satisfiable(falseState.constraints):
+                worklist.add(falseState)
+        
+        else:
+            // Execute instruction symbolically
+            newState = Execute(state, instruction)
+            worklist.add(newState)
+    
+    return results
+```
+
+### Detailed Example
+
+```solidity
+function target(uint x) public {
+    uint y = 0;
+    
+    if (x > 10) {
+        y = 1;
+    } else {
+        y = 2;
+    }
+    
+    if (y == 1 && x < 20) {
+        vulnerable();  // BUG!
+    }
+}
+```
+
+**Symbolic execution trace:**
+
+```
+Initial state:
+├─ pc = 0
+├─ stack = []
+├─ constraints = []
+└─ symbolic variables = {x: Symbol('x')}
+
+Step 1: Load x
+├─ Instruction: CALLDATALOAD(0x04)
+├─ Stack: [x]
+└─ pc = 1
+
+Step 2: Compare x > 10
+├─ Instruction: PUSH 10; GT
+├─ Stack: [x > 10]
+└─ pc = 3
+
+Step 3: JUMPI (first branch)
+├─ Condition: x > 10
+├─ FORK!
+│
+├─ Path A (true branch):
+│  ├─ Constraints: [x > 10]
+│  ├─ y = 1
+│  └─ pc = 10
+│
+└─ Path B (false branch):
+   ├─ Constraints: [x ≤ 10]
+   ├─ y = 2
+   └─ pc = 15
+
+Continue Path A:
+Step 4: Load y
+├─ Stack: [1]
+└─ pc = 11
+
+Step 5: Compare y == 1
+├─ Stack: [1 == 1] = [true]
+└─ pc = 13
+
+Step 6: JUMPI (second branch)
+├─ Condition: y == 1 ∧ x < 20
+├─ FORK!
+│
+├─ Path A1 (true branch):
+│  ├─ Constraints: [x > 10, x < 20]
+│  ├─ Calls vulnerable()
+│  ├─ BUG FOUND! ✗
+│  └─ Solution: x ∈ {11, 12, ..., 19}
+│
+└─ Path A2 (false branch):
+   ├─ Constraints: [x > 10, x ≥ 20]
+   └─ Safe ✓
+
+Continue Path B:
+Step 7: y == 1
+├─ Stack: [2 == 1] = [false]
+├─ Short-circuit: cannot reach vulnerable()
+└─ Safe ✓
+
+Final paths:
+1. [x ≤ 10] → Safe
+2. [x > 10, x ≥ 20] → Safe
+3. [x > 10, x < 20] → VULNERABLE!
+
+Concrete exploit:
+x = 15 satisfies [x > 10, x < 20]
+```
+
+## 3.4 Advanced Concepts
+
+### Symbolic Memory
+
+**Challenge:** Memory in EVM is byte-addressable, but symbolic execution typically works with words.
+
+```
+Concrete memory:
+memory[0x40] = 0x80  // Free memory pointer at 0x40
+
+Symbolic memory:
+memory[offset] = value where offset and value can be symbolic
+
+Problem: What if offset is symbolic?
+memory[x] = 5 where x is symbolic
+```
+
+**Solution 1: Concretization**
+```
+If offset is symbolic:
+    Try all possible values (up to some limit)
+    Fork execution for each value
+
+Example:
+memory[x] = 5 where x ∈ {0, 32, 64}
+
+Fork into 3 paths:
+- Path 1: x = 0, memory[0] = 5
+- Path 2: x = 32, memory[32] = 5
+- Path 3: x = 64, memory[64] = 5
+```
+
+**Solution 2: Lazy Evaluation**
+```
+Store symbolic memory as a mapping:
+memory: (SymbolicValue → SymbolicValue)
+
+On read:
+if exact match found:
+    return stored value
+else if overlap possible:
+    return fresh symbolic variable
+else:
+    return 0 (default)
+```
+
+**Solution 3: Theory of Arrays (SMT)**
+```
+Use SMT theory of arrays:
+
+(declare-const memory (Array (_ BitVec 256) (_ BitVec 8)))
+(declare-const x (_ BitVec 256))
+
+(assert (= (select memory x) #x05))  ; memory[x] = 5
+
+Solver handles all possible values of x!
+```
+
+### Symbolic Storage
+
+**EVM storage is a mapping: uint256 → uint256**
+
+```
+Symbolic storage challenges:
+1. Mappings with symbolic keys
+2. Nested mappings
+3. Array accesses with symbolic indices
+
+Example:
+mapping(address => uint) balances;
+balances[msg.sender] += amount;
+
+where msg.sender and amount are symbolic!
+```
+
+**Solution: Theory of Arrays**
+```
+(declare-const balances (Array (_ BitVec 160) (_ BitVec 256)))
+(declare-const sender (_ BitVec 160))
+(declare-const amount (_ BitVec 256))
+
+; Read old balance
+(define-const old_balance (select balances sender))
+
+; Write new balance
+(define-const new_balances (store balances sender (bvadd old_balance amount)))
+
+; Constraint: no overflow
+(assert (bvuge (bvadd old_balance amount) old_balance))
+```
+
+### Loop Handling
+
+**The halting problem makes perfect loop analysis impossible.**
+
+```solidity
+function hasLoop(uint n) public {
+    for (uint i = 0; i < n; i++) {  // How many iterations?
+        // ... do stuff
+    }
+}
+
+If n is symbolic:
+- Unroll 0 times?
+- Unroll 100 times?
+- Unroll until gas runs out?
+```
+
+**Solution 1: Loop Unrolling**
+```
+Unroll loop K times:
+
+Iteration 0: i = 0, constraint: i < n
+Iteration 1: i = 1, constraint: 1 < n
+Iteration 2: i = 2, constraint: 2 < n
+...
+Iteration K: i = K, constraint: K < n
+
+Then either:
+a) Assume loop exits (add constraint: K ≥ n)
+b) Assume loop continues (havoc state)
+```
+
+**Solution 2: Invariant Analysis**
+```
+Find loop invariant I such that:
+1. I holds before loop
+2. If I holds at iteration i, I holds at i+1
+3. I ∧ ¬condition → desired property
+
+Then we only need to check:
+- I holds initially
+- I preserved by loop body
+- I + exit condition implies property
+```
+
+**Solution 3: Bounded Model Checking**
+```
+Only analyze up to K loop iterations.
+
+Trade-off:
+- Small K: Fast but may miss bugs
+- Large K: Slow but more thorough
+
+In practice: K = 3-5 is often enough
+```
+
+### External Calls
+
+**Challenge:** When contract calls another contract, we don't know the behavior.
+
+```solidity
+function withdraw() public {
+    uint amount = balances[msg.sender];
+    
+    // External call - what does this do?
+    msg.sender.call{value: amount}("");
+    
+    balances[msg.sender] = 0;
+}
+```
+
+**Solution 1: Havoc (Conservative)**
+```
+On external call:
+- Assume arbitrary state changes
+- Assume call can succeed or fail
+- Fork execution for both cases
+
+Problems:
+- Very conservative (many false positives)
+- Loses precision
+```
+
+**Solution 2: Inline Analysis**
+```
+If target contract is known:
+- Inline its code
+- Analyze it symbolically
+- Continue with updated state
+
+Problems:
+- Only works for known contracts
+- Deep call chains expensive
+```
+
+**Solution 3: Summaries**
+```
+Compute summary of external contract:
+- Pre-conditions: what must be true before call
+- Post-conditions: what's true after call
+- Side effects: what storage/state changed
+
+Store summaries and reuse them.
+```
+
+## 3.5 Soundness vs Completeness
+
+### Definitions
+
+**Sound:** If tool says "no bugs", there are no bugs.
+```
+Sound = no false negatives
+(May have false positives)
+```
+
+**Complete:** If there's a bug, tool will find it.
+```
+Complete = no false positives
+(May have false negatives)
+```
+
+**Example:**
+```solidity
+function transfer(uint amount) public {
+    require(balance >= amount);
+    balance -= amount;
+}
+
+Unsound analysis:
+- Ignores overflow in subtraction
+- Says "safe" but could overflow
+- False negative! ✗
+
+Sound but incomplete analysis:
+- Assumes amount can be anything
+- Reports "possible overflow"
+- But in practice, amount comes from validated source
+- False positive!
+```
+
+### Trade-offs
+
+```
+                Sound?  Complete?  Practical?
+────────────────────────────────────────────
+Testing         No      No         Yes
+Fuzzing         No      No         Yes
+Symbolic Exec   Maybe   No         Yes
+Model Checking  Yes     Maybe      No
+Theorem Proving Yes     Yes        No
+```
+
+**Our goal:**
+Build a symbolic executor that is:
+- Mostly sound (few false negatives)
+- Reasonable false positive rate
+- Fast enough for real use
+
+---
+
+# Chapter 4: Constraint Solving with Z3
+
+## 4.1 Introduction to SMT Solving
+
+**SAT (Boolean Satisfiability):**
+```
+Given: Boolean formula φ
+Find: Assignment that makes φ true
+
+Example:
+φ = (a ∨ b) ∧ (¬a ∨ c) ∧ (¬b ∨ ¬c)
+
+Solution: a = false, b = true, c = false
+```
+
+**SMT (Satisfiability Modulo Theories):**
+```
+SAT + theories (integers, bit-vectors, arrays, etc.)
+
+Example:
+φ = (x > 10) ∧ (x < 20) ∧ (x % 2 = 0)
+
+Solution: x = 12
+```
+
+## 4.2 Z3 Basics
+
+**Z3 is a state-of-the-art SMT solver from Microsoft Research.**
+
+### Installation
+
+```bash
+npm install z3-solver
+```
+
+### Basic Usage
+
+```typescript
+import { init } from 'z3-solver';
+
+async function example() {
+    const { Context } = await init();
+    const { Solver, Int } = new Context('main');
+    
+    const solver = new Solver();
+    
+    // Create variables
+    const x = Int.const('x');
+    const y = Int.const('y');
+    
+    // Add constraints
+    solver.add(x.gt(10));        // x > 10
+    solver.add(x.lt(20));        // x < 20
+    solver.add(y.eq(x.mul(2)));  // y = x * 2
+    
+    // Check satisfiability
+    const result = await solver.check();
+    console.log(result);  // "sat"
+    
+    // Get model (solution)
+    if (result === 'sat') {
+        const model = solver.model();
+        console.log(`x = ${model.eval(x)}`);  // x = 11 (example)
+        console.log(`y = ${model.eval(y)}`);  // y = 22
+    }
+}
+```
+
+### Bit-vectors (Perfect for EVM!)
+
+```typescript
+const { BitVec } = new Context('main');
+
+// Create 256-bit integers (like uint256)
+const x = BitVec.const('x', 256);
+const y = BitVec.const('y', 256);
+
+// Bit-vector operations
+solver.add(x.add(y).eq(100));  // x + y = 100
+solver.add(x.ugt(50));         // x > 50 (unsigned greater than)
+
+// Check overflow
+const sum = x.add(y);
+const MAX_UINT256 = BitVec.val(2n**256n - 1n, 256);
+solver.add(sum.ult(x));  // Overflow: sum < x
+
+if (await solver.check() === 'sat') {
+    console.log('Overflow possible!');
+}
+```
+
+### Arrays (Perfect for Memory/Storage!)
+
+```typescript
+const { Array: Z3Array } = new Context('main');
+
+// Array: 256-bit address → 256-bit value
+const storage = Z3Array.K(BitVec.sort(256), BitVec.sort(256), BitVec.val(0, 256));
+
+const addr1 = BitVec.const('addr1', 256);
+const addr2 = BitVec.const('addr2', 256);
+const value = BitVec.const('value', 256);
+
+// storage[addr1] = value
+const storage1 = storage.store(addr1, value);
+
+// storage[addr2] should still be 0 (if addr1 ≠ addr2)
+solver.add(addr1.neq(addr2));
+solver.add(storage1.select(addr2).eq(0));
+
+await solver.check();  // sat
+```
+
+## 4.3 Encoding EVM Operations in Z3
+
+### Arithmetic
+
+```typescript
+// ADD
+function encodeADD(x: Z3BitVec, y: Z3BitVec): Z3BitVec {
+    return x.add(y);  // Wraps on overflow (mod 2^256)
+}
+
+// SUB
+function encodeSUB(x: Z3BitVec, y: Z3BitVec): Z3BitVec {
+    return x.sub(y);  // Wraps on underflow
+}
+
+// MUL
+function encodeMUL(x: Z3BitVec, y: Z3BitVec): Z3BitVec {
+    return x.mul(y);
+}
+
+// DIV (unsigned division)
+function encodeDIV(x: Z3BitVec, y: Z3BitVec): Z3BitVec {
+    // Division by zero returns 0 in EVM
+    return y.eq(0).ite(BitVec.val(0, 256), x.udiv(y));
+}
+```
+
+### Comparison
+
+```typescript
+// LT (unsigned less than)
+function encodeLT(x: Z3BitVec, y: Z3BitVec): Z3BitVec {
+    return x.ult(y).ite(
+        BitVec.val(1, 256),
+        BitVec.val(0, 256)
+    );
+}
+
+// GT (unsigned greater than)
+function encodeGT(x: Z3BitVec, y: Z3BitVec): Z3BitVec {
+    return x.ugt(y).ite(
+        BitVec.val(1, 256),
+        BitVec.val(0, 256)
+    );
+}
+
+// EQ
+function encodeEQ(x: Z3BitVec, y: Z3BitVec): Z3BitVec {
+    return x.eq(y).ite(
+        BitVec.val(1, 256),
+        BitVec.val(0, 256)
+    );
+}
+```
+
+### Bitwise Operations
+
+```typescript
+// AND
+function encodeAND(x: Z3BitVec, y: Z3BitVec): Z3BitVec {
+    return x.and(y);
+}
+
+// OR
+function encodeOR(x: Z3BitVec, y: Z3BitVec): Z3BitVec {
+    return x.or(y);
+}
+
+// XOR
+function encodeXOR(x: Z3BitVec, y: Z3BitVec): Z3BitVec {
+    return x.xor(y);
+}
+
+// NOT
+function encodeNOT(x: Z3BitVec): Z3BitVec {
+    return x.not();
+}
+
+// SHL (shift left)
+function encodeSHL(shift: Z3BitVec, value: Z3BitVec): Z3BitVec {
+    // If shift >= 256, result is 0
+    return shift.uge(256).ite(
+        BitVec.val(0, 256),
+        value.shl(shift)
+    );
+}
+
+// SHR (logical shift right)
+function encodeSHR(shift: Z3BitVec, value: Z3BitVec): Z3BitVec {
+    return shift.uge(256).ite(
+        BitVec.val(0, 256),
+        value.lshr(shift)
+    );
+}
+```
+
+### Memory Operations
+
+```typescript
+// MLOAD
+function encodeMLoad(
+    memory: Z3Array,
+    offset: Z3BitVec
+): Z3BitVec {
+    // Load 32 bytes from memory
+    // Simplified: return single word
+    return memory.select(offset);
+}
+
+// MSTORE
+function encodeMStore(
+    memory: Z3Array,
+    offset: Z3BitVec,
+    value: Z3BitVec
+): Z3Array {
+    return memory.store(offset, value);
+}
+
+// MSTORE8
+function encodeMStore8(
+    memory: Z3Array,
+    offset: Z3BitVec,
+    value: Z3BitVec
+): Z3Array {
+    // Store only lowest byte
+    const byte = value.and(BitVec.val(0xFF, 256));
+    return memory.store(offset, byte);
+}
+```
+
+### Storage Operations
+
+```typescript
+// SLOAD
+function encodeSLoad(
+    storage: Z3Array,
+    key: Z3BitVec
+): Z3BitVec {
+    return storage.select(key);
+}
+
+// SSTORE
+function encodeSStore(
+    storage: Z3Array,
+    key: Z3BitVec,
+    value: Z3BitVec
+): Z3Array {
+    return storage.store(key, value);
+}
+```
+
+### SHA3/KECCAK256
+
+**Challenge:** Keccak256 is a cryptographic hash - can't model exactly in Z3.
+
+**Solution 1: Uninterpreted Function**
+```typescript
+// Declare keccak256 as uninterpreted function
+const keccak256 = Function.declare(
+    'keccak256',
+    BitVec.sort(256),  // input
+    BitVec.sort(256)   // output
+);
+
+// Property: hash is deterministic
+solver.add(
+    keccak256(x).eq(keccak256(y)).implies(x.eq(y))
+);
+
+// Property: hash is injective (different inputs → different outputs)
+solver.add(
+    x.neq(y).implies(keccak256(x).neq(keccak256(y)))
+);
+```
+
+**Solution 2: Concrete Hashing**
+```typescript
+function encodeKeccak256(data: Z3BitVec): Z3BitVec {
+    // If data is concrete, compute actual hash
+    if (data.isConcrete()) {
+        const concreteData = data.value();
+        const hash = keccak256(concreteData);
+        return BitVec.val(hash, 256);
+    }
+    
+    // If symbolic, use uninterpreted function
+    return keccak256Func(data);
+}
+```
+
+## 4.4 Optimization Techniques
+
+### Incremental Solving
+
+```typescript
+// Instead of creating new solver each time
+const solver = new Solver();
+
+// Add base constraints
+solver.add(x.ugt(0));
+solver.add(x.ult(100));
+
+// Check first path
+solver.push();  // Save state
+solver.add(y.eq(x.mul(2)));
+await solver.check();  // sat
+solver.pop();   // Restore state
+
+// Check second path (reuses base constraints!)
+solver.push();
+solver.add(y.eq(x.add(10)));
+await solver.check();  // sat
+solver.pop();
+```
+
+### Simplification
+
+```typescript
+// Simplify expressions before sending to solver
+const expr = x.add(0).mul(1).add(y).sub(y);
+
+const simplified = expr.simplify();
+// Result: x (much simpler!)
+
+solver.add(simplified.eq(42));
+```
+
+### Tactics
+
+```typescript
+// Use Z3 tactics for better performance
+const { Tactic } = new Context('main');
+
+// Create specialized solver
+const tactic = Tactic.andThen(
+    'simplify',           // Simplify first
+    'solve-eqs',          // Solve equations
+    'bit-blast',          // Convert to SAT
+    'sat'                 // SAT solver
+);
+
+const solver = tactic.solver();
+```
+
+## 4.5 Advanced Constraint Solving Patterns
+
+### Quantifier Elimination
+
+```typescript
+// Problem: Does there exist some value that breaks this?
+// "For all user inputs x, the contract does not revert"
+
+// Can't express "forall" directly, so we use:
+// Find x such that contract reverts (negation)
+
+const x = BitVec.const('x', 256);
+
+// Add path constraints that lead to revert
+solver.add(x.ugt(100));  // Some condition
+solver.add(/* revert path constraint */);
+
+// If SAT: found a value that causes revert!
+// If UNSAT: no such value exists (forall x, safe)
+```
+
+### Handling Division
+
+```typescript
+// EVM division truncates toward zero
+// Z3 division semantics must match
+
+function encodeSDIV(x: Z3BitVec, y: Z3BitVec): Z3BitVec {
+    // Signed division with EVM semantics
+    // Division by zero returns 0
+    // -2^255 / -1 returns -2^255 (not overflow)
+    
+    const zero = BitVec.val(0, 256);
+    const minInt = BitVec.val(-(2n ** 255n), 256);
+    const negOne = BitVec.val(-1n & ((1n << 256n) - 1n), 256);
+    
+    return y.eq(zero).ite(
+        zero,  // div by zero = 0
+        x.eq(minInt).and(y.eq(negOne)).ite(
+            minInt,  // special case: MIN_INT / -1 = MIN_INT
+            x.sdiv(y)
+        )
+    );
+}
+```
+
+### Memory Model Formalization
+
+```typescript
+// Byte-level memory model for precise analysis
+
+class SymbolicMemory {
+    private mem: Z3Array;  // (BitVec 256) -> (BitVec 8)
+    
+    constructor(ctx: Context) {
+        // Initialize with all zeros
+        this.mem = ctx.Array.K(
+            ctx.BitVec.sort(256),
+            ctx.BitVec.sort(8),
+            ctx.BitVec.val(0, 8)
+        );
+    }
+    
+    // MLOAD: Read 32 bytes from offset
+    mload(offset: Z3BitVec): Z3BitVec {
+        // Read bytes 0-31 and concatenate
+        let result = this.mem.select(offset);
+        for (let i = 1; i < 32; i++) {
+            const byteOffset = offset.add(ctx.BitVec.val(i, 256));
+            const byte = this.mem.select(byteOffset);
+            result = result.concat(byte);  // Big-endian
+        }
+        return result;
+    }
+    
+    // MSTORE: Write 32 bytes at offset
+    mstore(offset: Z3BitVec, value: Z3BitVec): void {
+        // Write bytes 31 down to 0 (big-endian)
+        for (let i = 0; i < 32; i++) {
+            const byteOffset = offset.add(ctx.BitVec.val(i, 256));
+            const byte = value.extract(255 - i*8, 248 - i*8);
+            this.mem = this.mem.store(byteOffset, byte);
+        }
+    }
+    
+    // MSTORE8: Write 1 byte at offset
+    mstore8(offset: Z3BitVec, value: Z3BitVec): void {
+        const byte = value.extract(7, 0);  // Lowest byte
+        this.mem = this.mem.store(offset, byte);
+    }
+}
+```
+
+---
+
+# Chapter 5: Path Exploration Strategies
+
+## 5.1 The Path Explosion Problem
+
+**Why is path exploration hard?**
+
+```solidity
+function branches(uint a, uint b, uint c, uint d) public {
+    if (a > 0) { /* ... */ }  // 2 paths
+    if (b > 0) { /* ... */ }  // × 2 = 4 paths
+    if (c > 0) { /* ... */ }  // × 2 = 8 paths
+    if (d > 0) { /* ... */ }  // × 2 = 16 paths
+    // ... 10 more branches = 2^14 = 16,384 paths!
+}
+```
+
+**Loops make it worse:**
+
+```solidity
+function loop(uint n) public {
+    for (uint i = 0; i < n; i++) {  // n iterations
+        if (arr[i] > 0) { /* ... */ }  // 2^n paths!
+    }
+}
+```
+
+## 5.2 Search Strategies
+
+### Depth-First Search (DFS)
+
+```typescript
+class DFSPathManager {
+    private worklist: ExecutionPath[] = [];
+    
+    addPath(path: ExecutionPath): void {
+        this.worklist.push(path);  // Add to end (LIFO)
+    }
+    
+    getNextPath(): ExecutionPath | null {
+        return this.worklist.pop() || null;  // Take from end
+    }
+}
+
+/*
+Pros:
+- Memory efficient (only keeps one path in memory)
+- Good for finding deep bugs
+
+Cons:
+- Can get stuck in deep paths
+- May miss shallow bugs
+*/
+```
+
+### Breadth-First Search (BFS)
+
+```typescript
+class BFSPathManager {
+    private worklist: ExecutionPath[] = [];
+    
+    addPath(path: ExecutionPath): void {
+        this.worklist.push(path);  // Add to end
+    }
+    
+    getNextPath(): ExecutionPath | null {
+        return this.worklist.shift() || null;  // Take from start (FIFO)
+    }
+}
+
+/*
+Pros:
+- Explores all paths at depth d before depth d+1
+- Finds shortest path to bug
+
+Cons:
+- Memory intensive (keeps all paths at current depth)
+- May time out before reaching deep bugs
+*/
+```
+
+### Random Path Selection
+
+```typescript
+class RandomPathManager {
+    private worklist: ExecutionPath[] = [];
+    
+    addPath(path: ExecutionPath): void {
+        this.worklist.push(path);
+    }
+    
+    getNextPath(): ExecutionPath | null {
+        if (this.worklist.length === 0) return null;
+        const idx = Math.floor(Math.random() * this.worklist.length);
+        return this.worklist.splice(idx, 1)[0];
+    }
+}
+
+/*
+Pros:
+- Avoids getting stuck
+- Good coverage over time
+
+Cons:
+- Non-deterministic
+- May revisit similar paths
+*/
+```
+
+### Coverage-Guided Selection
+
+```typescript
+class CoverageGuidedPathManager {
+    private worklist: ExecutionPath[] = [];
+    private globalCoverage: Set<number> = new Set();
+    
+    addPath(path: ExecutionPath): void {
+        this.worklist.push(path);
+    }
+    
+    getNextPath(): ExecutionPath | null {
+        if (this.worklist.length === 0) return null;
+        
+        // Score paths by new coverage potential
+        let bestPath: ExecutionPath | null = null;
+        let bestScore = -1;
+        
+        for (const path of this.worklist) {
+            const newCoverage = this.countNewCoverage(path);
+            if (newCoverage > bestScore) {
+                bestScore = newCoverage;
+                bestPath = path;
+            }
+        }
+        
+        if (bestPath) {
+            this.worklist = this.worklist.filter(p => p !== bestPath);
+            this.globalCoverage = new Set([
+                ...this.globalCoverage,
+                ...bestPath.coverage
+            ]);
+        }
+        
+        return bestPath;
+    }
+    
+    private countNewCoverage(path: ExecutionPath): number {
+        return [...path.coverage].filter(pc => !this.globalCoverage.has(pc)).length;
+    }
+}
+
+/*
+Pros:
+- Maximizes code coverage
+- Efficient use of resources
+
+Cons:
+- May miss bugs in rarely-reached code
+- Overhead of coverage tracking
+*/
+```
+
+### Directed/Targeted Search
+
+```typescript
+class TargetedPathManager {
+    private worklist: ExecutionPath[] = [];
+    private targetPC: number;  // PC of vulnerable instruction
+    private distanceToTarget: Map<number, number>;  // PC -> distance
+    
+    constructor(cfg: BasicBlock[], targetPC: number) {
+        this.targetPC = targetPC;
+        this.distanceToTarget = this.computeDistances(cfg, targetPC);
+    }
+    
+    addPath(path: ExecutionPath): void {
+        this.worklist.push(path);
+    }
+    
+    getNextPath(): ExecutionPath | null {
+        if (this.worklist.length === 0) return null;
+        
+        // Sort by distance to target (closest first)
+        this.worklist.sort((a, b) => {
+            const distA = this.distanceToTarget.get(a.state.pc) ?? Infinity;
+            const distB = this.distanceToTarget.get(b.state.pc) ?? Infinity;
+            return distA - distB;
+        });
+        
+        return this.worklist.shift()!;
+    }
+    
+    private computeDistances(cfg: BasicBlock[], target: number): Map<number, number> {
+        // BFS from target backwards
+        const distances = new Map<number, number>();
+        const queue: [number, number][] = [[target, 0]];
+        
+        while (queue.length > 0) {
+            const [pc, dist] = queue.shift()!;
+            if (distances.has(pc)) continue;
+            distances.set(pc, dist);
+            
+            // Add predecessors
+            const block = cfg.find(b => b.start <= pc && pc < b.end);
+            if (block) {
+                for (const pred of block.predecessors) {
+                    queue.push([pred, dist + 1]);
+                }
+            }
+        }
+        
+        return distances;
+    }
+}
+
+/*
+Pros:
+- Fast at finding specific bugs
+- Good for known vulnerability patterns
+
+Cons:
+- Only finds targeted bugs
+- Requires knowing target location
+*/
+```
+
+## 5.3 Path Merging
+
+**Idea:** Merge paths that are "similar enough" to reduce explosion.
+
+```typescript
+interface MergeableState {
+    pc: number;
+    stackDepth: number;
+    // Simplified representation
+}
+
+function canMerge(state1: SymbolicState, state2: SymbolicState): boolean {
+    // Same program counter
+    if (state1.pc !== state2.pc) return false;
+    
+    // Same stack structure
+    if (state1.stack.length !== state2.stack.length) return false;
+    
+    // Similar memory layout
+    // ...
+    
+    return true;
+}
+
+function mergeStates(state1: SymbolicState, state2: SymbolicState): SymbolicState {
+    const merged = new SymbolicState();
+    merged.pc = state1.pc;
+    
+    // Merge stack: create ITE (if-then-else) expressions
+    for (let i = 0; i < state1.stack.length; i++) {
+        const v1 = state1.stack[i];
+        const v2 = state2.stack[i];
+        
+        if (areEqual(v1, v2)) {
+            merged.stack.push(v1);
+        } else {
+            // Create symbolic merge
+            merged.stack.push(createITE(
+                mergeCondition,  // Which path we're on
+                v1,
+                v2
+            ));
+        }
+    }
+    
+    return merged;
+}
+```
+
+## 5.4 State Subsumption
+
+**Idea:** If state A "covers" state B, don't explore B.
+
+```typescript
+function subsumes(stateA: SymbolicState, stateB: SymbolicState): boolean {
+    // A subsumes B if:
+    // 1. Same PC
+    if (stateA.pc !== stateB.pc) return false;
+    
+    // 2. Same stack structure
+    if (stateA.stack.length !== stateB.stack.length) return false;
+    
+    // 3. A's constraints are weaker (any solution to B satisfies A)
+    // Check if constraints(B) implies constraints(A)
+    const solver = new Solver();
+    solver.add(...constraintsB);
+    solver.add(NOT(AND(...constraintsA)));
+    
+    return solver.check() === 'unsat';  // No solution means B implies A
+}
+```
+
+---
+
+# Chapter 6: Vulnerability Detection Patterns
+
+## 6.1 Reentrancy Detection
+
+**Pattern:** CALL before SSTORE with dependent state
+
+```typescript
+interface ReentrancyVulnerability {
+    callInstruction: number;  // PC of CALL
+    storeInstruction: number; // PC of SSTORE
+    path: Constraint[];       // Path to vulnerability
+    severity: 'HIGH' | 'MEDIUM' | 'LOW';
+}
+
+function detectReentrancy(
+    execution: SymbolicExecution
+): ReentrancyVulnerability[] {
+    const vulnerabilities: ReentrancyVulnerability[] = [];
+    
+    for (const path of execution.completedPaths) {
+        const trace = path.executionTrace;
+        
+        // Find all CALL instructions
+        const calls = trace.filter(t => 
+            ['CALL', 'DELEGATECALL', 'STATICCALL'].includes(t.opcode)
+        );
+        
+        for (const call of calls) {
+            // Find SSTORE instructions after this CALL
+            const storesAfter = trace.filter(t =>
+                t.step > call.step && t.opcode === 'SSTORE'
+            );
+            
+            for (const store of storesAfter) {
+                // Check if store depends on state before call
+                const storeDeps = analyzeDataDependencies(store);
+                const stateBeforeCall = path.stateAtStep(call.step - 1);
+                
+                if (dependsOn(storeDeps, stateBeforeCall.storage)) {
+                    vulnerabilities.push({
+                        callInstruction: call.pc,
+                        storeInstruction: store.pc,
+                        path: path.constraints,
+                        severity: 'HIGH'
+                    });
+                }
+            }
+        }
+    }
+    
+    return vulnerabilities;
+}
+```
+
+## 6.2 Integer Overflow/Underflow
+
+```typescript
+interface OverflowVulnerability {
+    instruction: number;
+    operation: 'ADD' | 'SUB' | 'MUL';
+    operands: [SymbolicValue, SymbolicValue];
+    path: Constraint[];
+}
+
+function detectOverflow(
+    execution: SymbolicExecution
+): OverflowVulnerability[] {
+    const vulnerabilities: OverflowVulnerability[] = [];
+    const solver = new Solver();
+    
+    for (const path of execution.completedPaths) {
+        // Add path constraints
+        solver.push();
+        for (const constraint of path.constraints) {
+            solver.add(constraint.z3Expr);
+        }
+        
+        for (const trace of path.executionTrace) {
+            if (trace.opcode === 'ADD') {
+                const [a, b] = trace.operands;
+                const result = trace.result;
+                
+                // Overflow: result < a (for unsigned add)
+                solver.push();
+                solver.add(result.z3Expr.ult(a.z3Expr));
+                
+                if (solver.check() === 'sat') {
+                    vulnerabilities.push({
+                        instruction: trace.pc,
+                        operation: 'ADD',
+                        operands: [a, b],
+                        path: path.constraints
+                    });
+                }
+                solver.pop();
+            }
+            
+            if (trace.opcode === 'SUB') {
+                const [a, b] = trace.operands;
+                
+                // Underflow: b > a
+                solver.push();
+                solver.add(b.z3Expr.ugt(a.z3Expr));
+                
+                if (solver.check() === 'sat') {
+                    vulnerabilities.push({
+                        instruction: trace.pc,
+                        operation: 'SUB',
+                        operands: [a, b],
+                        path: path.constraints
+                    });
+                }
+                solver.pop();
+            }
+            
+            if (trace.opcode === 'MUL') {
+                const [a, b] = trace.operands;
+                const result = trace.result;
+                
+                // Overflow: a != 0 && result / a != b
+                solver.push();
+                const zero = BitVec.val(0, 256);
+                solver.add(a.z3Expr.neq(zero));
+                solver.add(result.z3Expr.udiv(a.z3Expr).neq(b.z3Expr));
+                
+                if (solver.check() === 'sat') {
+                    vulnerabilities.push({
+                        instruction: trace.pc,
+                        operation: 'MUL',
+                        operands: [a, b],
+                        path: path.constraints
+                    });
+                }
+                solver.pop();
+            }
+        }
+        
+        solver.pop();
+    }
+    
+    return vulnerabilities;
+}
+```
+
+## 6.3 Access Control Violations
+
+```typescript
+interface AccessControlVulnerability {
+    functionSelector: string;
+    missingCheck: 'owner' | 'onlyOwner' | 'msg.sender' | 'tx.origin';
+    canBeCalledBy: 'anyone' | 'specific_addresses';
+    path: Constraint[];
+}
+
+function detectAccessControl(
+    execution: SymbolicExecution,
+    sensitiveOperations: Set<string>  // e.g., {'selfdestruct', 'setOwner'}
+): AccessControlVulnerability[] {
+    const vulnerabilities: AccessControlVulnerability[] = [];
+    
+    for (const path of execution.completedPaths) {
+        // Check if path reaches a sensitive operation
+        const sensitiveCalls = path.executionTrace.filter(t =>
+            sensitiveOperations.has(t.opcode) ||
+            isSensitiveFunction(t)
+        );
+        
+        if (sensitiveCalls.length === 0) continue;
+        
+        // Check if there's an access control check on this path
+        const hasOwnerCheck = path.constraints.some(c =>
+            constraintInvolves(c, 'caller') &&
+            constraintInvolves(c, 'owner')  // storage slot for owner
+        );
+        
+        if (!hasOwnerCheck) {
+            // Can anyone call this?
+            const solver = new Solver();
+            for (const constraint of path.constraints) {
+                solver.add(constraint.z3Expr);
+            }
+            
+            // Add constraint that caller is arbitrary
+            const caller = BitVec.const('caller', 160);
+            // (no additional constraints on caller)
+            
+            if (solver.check() === 'sat') {
+                vulnerabilities.push({
+                    functionSelector: path.entryFunction,
+                    missingCheck: 'onlyOwner',
+                    canBeCalledBy: 'anyone',
+                    path: path.constraints
+                });
+            }
+        }
+    }
+    
+    return vulnerabilities;
+}
+```
+
+## 6.4 Unchecked Return Values
+
+```typescript
+interface UncheckedReturnVulnerability {
+    callInstruction: number;
+    callType: 'CALL' | 'SEND' | 'TRANSFER';
+    returnNotChecked: boolean;
+}
+
+function detectUncheckedReturn(
+    execution: SymbolicExecution
+): UncheckedReturnVulnerability[] {
+    const vulnerabilities: UncheckedReturnVulnerability[] = [];
+    
+    for (const path of execution.completedPaths) {
+        for (let i = 0; i < path.executionTrace.length; i++) {
+            const trace = path.executionTrace[i];
+            
+            if (trace.opcode === 'CALL') {
+                // CALL pushes success (1) or failure (0) onto stack
+                const returnValue = trace.result;
+                
+                // Check if this value is ever used in a condition
+                let isChecked = false;
+                
+                for (let j = i + 1; j < path.executionTrace.length; j++) {
+                    const later = path.executionTrace[j];
+                    
+                    if (later.opcode === 'ISZERO' || 
+                        later.opcode === 'JUMPI') {
+                        if (usesValue(later.operands, returnValue)) {
+                            isChecked = true;
+                            break;
+                        }
+                    }
+                    
+                    // If return value is popped without checking, it's not checked
+                    if (later.opcode === 'POP' && 
+                        usesValue([later.operands[0]], returnValue)) {
+                        break;  // Not checked!
+                    }
+                }
+                
+                if (!isChecked) {
+                    vulnerabilities.push({
+                        callInstruction: trace.pc,
+                        callType: 'CALL',
+                        returnNotChecked: true
+                    });
+                }
+            }
+        }
+    }
+    
+    return vulnerabilities;
+}
+```
+
+## 6.5 Self-Destruct Vulnerabilities
+
+```typescript
+function detectSelfDestruct(
+    execution: SymbolicExecution
+): { pc: number; path: Constraint[]; canTrigger: boolean }[] {
+    const vulnerabilities = [];
+    
+    for (const path of execution.completedPaths) {
+        const selfDestructs = path.executionTrace.filter(
+            t => t.opcode === 'SELFDESTRUCT'
+        );
+        
+        for (const sd of selfDestructs) {
+            // Check if an arbitrary user can trigger this
+            const solver = new Solver();
+            for (const constraint of path.constraints) {
+                solver.add(constraint.z3Expr);
+            }
+            
+            // Can any caller reach this?
+            if (solver.check() === 'sat') {
+                const model = solver.model();
+                vulnerabilities.push({
+                    pc: sd.pc,
+                    path: path.constraints,
+                    canTrigger: true,
+                    triggerInput: model
+                });
+            }
+        }
+    }
+    
+    return vulnerabilities;
+}
+```
+
+---
+
+# Chapter 7: Concolic Execution
+
+## 7.1 What is Concolic Execution?
+
+**Concolic = Concrete + Symbolic**
+
+Run the program with concrete inputs while building symbolic constraints.
+
+```
+Traditional symbolic execution:
+- Everything is symbolic from the start
+- Expensive constraint solving
+- Path explosion
+
+Concolic execution:
+- Start with concrete input
+- Track symbolic constraints along the way
+- Negate one constraint to explore new path
+- Repeat with new concrete input
+```
+
+## 7.2 The Concolic Algorithm
+
+```typescript
+class ConcolicExecutor {
+    private solver: Solver;
+    private coveredBranches: Set<string> = new Set();
+    
+    async execute(
+        bytecode: string,
+        maxIterations: number = 100
+    ): Promise<ExecutionResult[]> {
+        const results: ExecutionResult[] = [];
+        
+        // Start with random concrete input
+        let concreteInput = this.generateRandomInput();
+        
+        for (let i = 0; i < maxIterations; i++) {
+            // Run with concrete input, collecting symbolic constraints
+            const { pathConstraints, branchPoints, result } = 
+                await this.runConcrete(bytecode, concreteInput);
+            
+            results.push(result);
+            
+            // Mark covered branches
+            for (const branch of branchPoints) {
+                this.coveredBranches.add(branch.id);
+            }
+            
+            // Find an unexplored branch by negating a constraint
+            const newInput = await this.findNewInput(pathConstraints, branchPoints);
+            
+            if (!newInput) {
+                // No more unexplored paths
+                break;
+            }
+            
+            concreteInput = newInput;
+        }
+        
+        return results;
+    }
+    
+    private async findNewInput(
+        constraints: Constraint[],
+        branches: BranchPoint[]
+    ): Promise<ConcreteInput | null> {
+        // Try negating each branch from last to first
+        for (let i = branches.length - 1; i >= 0; i--) {
+            const branch = branches[i];
+            const negatedBranchId = this.negateBranch(branch.id);
+            
+            // Skip if we've already covered this branch
+            if (this.coveredBranches.has(negatedBranchId)) {
+                continue;
+            }
+            
+            // Build constraints: all previous + negated current
+            this.solver.push();
+            
+            for (let j = 0; j < i; j++) {
+                this.solver.add(constraints[j].z3Expr);
+            }
+            
+            // Negate the target branch
+            this.solver.add(this.negate(branches[i].constraint));
+            
+            if (await this.solver.check() === 'sat') {
+                const model = this.solver.model();
+                const newInput = this.extractInput(model);
+                this.solver.pop();
+                return newInput;
+            }
+            
+            this.solver.pop();
+        }
+        
+        return null;  // No new paths found
+    }
+    
+    private generateRandomInput(): ConcreteInput {
+        return {
+            calldata: crypto.randomBytes(100),
+            value: 0n,
+            caller: BigInt('0x' + crypto.randomBytes(20).toString('hex'))
+        };
+    }
+}
+```
+
+## 7.3 Hybrid Approach: Best of Both Worlds
+
+```typescript
+class HybridExecutor {
+    private symbolicExecutor: SymbolicExecutor;
+    private concolicExecutor: ConcolicExecutor;
+    
+    async analyze(bytecode: string): Promise<AnalysisResult> {
+        // Phase 1: Quick symbolic exploration
+        // Gets broad coverage but may time out on complex paths
+        const symbolicResults = await this.symbolicExecutor.execute(bytecode, {
+            timeout: 30_000,  // 30 seconds
+            maxPaths: 100
+        });
+        
+        // Phase 2: Targeted concolic execution
+        // Focus on unexplored code regions
+        const uncoveredPCs = this.findUncoveredCode(symbolicResults);
+        
+        const concolicResults = await this.concolicExecutor.execute(bytecode, {
+            targetPCs: uncoveredPCs,
+            maxIterations: 50
+        });
+        
+        // Phase 3: Deep symbolic on interesting paths
+        // Follow up on concolic discoveries
+        const interestingPaths = this.findInterestingPaths(concolicResults);
+        
+        const deepResults = await this.symbolicExecutor.execute(bytecode, {
+            startingPaths: interestingPaths,
+            timeout: 60_000,
+            maxPaths: 50
+        });
+        
+        return this.combineResults(symbolicResults, concolicResults, deepResults);
+    }
+}
+```
+
+---
+
+**This concludes Part II: Symbolic Execution Theory**
+
+You now have the theoretical foundation to understand and implement a production-grade symbolic execution engine. The mathematics, algorithms, and patterns covered here form the intellectual backbone of tools like Mythril, Manticore, and HEVM.
+
+**Key Takeaways:**
+
+1. **Symbolic values** represent sets of possible concrete values through constraints
+2. **Path constraints** accumulate as we explore branches
+3. **SMT solvers** (Z3) decide satisfiability of these constraints
+4. **Path explosion** is the fundamental challenge - we need smart exploration strategies
+5. **Vulnerability patterns** can be encoded as constraint queries
+6. **Concolic execution** provides a practical hybrid approach
+
+**Next: Part III - Building the Production Engine**
+- Complete TypeScript implementation
+- Z3 integration
+- Real vulnerability detection
+- The Solidity on-chain version
