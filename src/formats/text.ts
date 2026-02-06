@@ -68,7 +68,7 @@ export function formatInstruction(
     const parts: string[] = [];
     
     // Program counter
-    if (options.includePC) {
+    if (options.includePC !== false) {
         parts.push(`[${instruction.pc.toString().padStart(5, '0')}]`);
     }
     
