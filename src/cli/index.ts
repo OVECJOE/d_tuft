@@ -34,18 +34,20 @@ program
             // Read input
             let bytecode: Uint8Array;
             if (input.startsWith('0x')) {
-                // Hex string
-                bytecode = hexToBytes(input);
+                bytecode = hexToBytes(input); // Hex string
             } else {
-                // File
-                const fileContent = readFileSync(input, 'utf-8').trim();
+                const fileContent = readFileSync(input, 'utf-8').trim(); // File
                 bytecode = hexToBytes(fileContent);
             }
 
             console.error(chalk.blue(`Disassembling ${bytecode.length} bytes...`));
 
             // Disassemble
-            const result = disassemble(bytecode);
+            const result = disassemble(bytecode, {
+                includePC: options.pc,
+                includeGas: options.gas,
+                identifyFunctions: options.format === 'annotated' // coming soon: 4-byte function selector analysis
+            });
 
             // Format output
             let output: string;
