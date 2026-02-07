@@ -11,6 +11,26 @@ export function isHexString(str: string): boolean {
 }
 
 /**
+ * Check if string is valid hex characters but odd length (missing leading zero)
+ */
+export function isOddLengthHex(str: string): boolean {
+    const cleaned = str.startsWith('0x') ? str.slice(2) : str;
+    return /^[0-9a-fA-F]+$/.test(cleaned) && cleaned.length % 2 === 1;
+}
+
+/**
+ * Normalize hex string by padding odd-length hex with leading zero
+ */
+export function normalizeHex(str: string): string {
+    const prefix = str.startsWith('0x') ? '0x' : '';
+    const cleaned = str.startsWith('0x') ? str.slice(2) : str;
+    if (cleaned.length % 2 === 1) {
+        return prefix + '0' + cleaned;
+    }
+    return str;
+}
+
+/**
  * Add 0x prefix if not present
  */
 export function addHexPrefix(hex: string): string {

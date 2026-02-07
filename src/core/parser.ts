@@ -59,8 +59,8 @@ export class BytecodeParser {
             return this.createInvalidInstruction(pc);
         }
 
-        // Handle PUSH opcodes
-        if (opcode.pushBytes) {
+        // Handle PUSH opcodes (including PUSH0)
+        if (opcode.pushBytes !== undefined && opcode.pushBytes > 0) {
             const immediate = this.readImmediateData(opcode.pushBytes);
 
             // Warn if truncated
@@ -68,13 +68,13 @@ export class BytecodeParser {
                 this.warn(
                     `Truncated ${opcode.mnemonic} at position ${pc}: ` +
                     `expected ${opcode.pushBytes} bytes, got ${immediate.length}`
-                )
+                );
             }
 
             return { opcode, pc, immediate };
         }
 
-        // Regular opcode
+        // Regular opcode (including PUSH0 which has pushBytes: 0)
         return { opcode, pc };
     }
 
@@ -90,19 +90,23 @@ export class BytecodeParser {
 
     /**
      * Read immediate data for PUSH instructions
+     * Pads with zeros on the right if truncated to match EVM behavior
+     * where incomplete PUSH data is treated as zero-padded
      */
     private readImmediateData(length: number): Uint8Array {
         const available = this.bytecode.length - this.position;
         const toRead = Math.min(length, available);
 
+        // Always allocate the full expected length
         const data = new Uint8Array(length);
 
-        // Read available bytes
+        // Read available bytes into the beginning of the array
         for (let i = 0; i < toRead; i++) {
             data[i] = this.bytecode[this.position++] as number;
         }
 
-        // Remaining bytes are implicitly 0x00 (already zero-initialized)
+        // Remaining bytes are already zero (default Uint8Array initialization)
+        // This matches EVM behavior where truncated PUSH data is right-padded with zeros
 
         return data;
     }

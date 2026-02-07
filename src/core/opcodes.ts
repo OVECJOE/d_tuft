@@ -103,7 +103,7 @@ export const OPCODES: Record<OpcodeValue, Opcode> = {
         gas: 5,
         description: 'Extend length of two\'s complement signed integer'
     },
-    
+
     // 0x10: Comparison & Bitwise Logic Operations
     0x10: {
         value: 0x10,
@@ -217,7 +217,7 @@ export const OPCODES: Record<OpcodeValue, Opcode> = {
         gas: 3,
         description: 'Arithmetic shift right operation'
     },
-    
+
     // 0x20: SHA3
     0x20: {
         value: 0x20,
@@ -227,7 +227,7 @@ export const OPCODES: Record<OpcodeValue, Opcode> = {
         gas: 30,
         description: 'Compute Keccak-256 hash'
     },
-    
+
     // 0x30: Environmental Information
     0x30: {
         value: 0x30,
@@ -357,7 +357,7 @@ export const OPCODES: Record<OpcodeValue, Opcode> = {
         gas: 100,
         description: 'Get hash of an account\'s code'
     },
-    
+
     // 0x40: Block Information
     0x40: {
         value: 0x40,
@@ -431,7 +431,23 @@ export const OPCODES: Record<OpcodeValue, Opcode> = {
         gas: 2,
         description: 'Get the base fee'
     },
-    
+    0x49: {
+        value: 0x49,
+        mnemonic: 'BLOBHASH',
+        inputs: 1,
+        outputs: 1,
+        gas: 3,
+        description: 'Get transaction\'s blob versioned hash at index'
+    },
+    0x4a: {
+        value: 0x4a,
+        mnemonic: 'BLOBBASEFEE',
+        inputs: 0,
+        outputs: 1,
+        gas: 2,
+        description: 'Get current block\'s blob base fee'
+    },
+
     // 0x50: Stack, Memory, Storage and Flow Operations
     0x50: {
         value: 0x50,
@@ -529,11 +545,46 @@ export const OPCODES: Record<OpcodeValue, Opcode> = {
         gas: 1,
         description: 'Mark valid jump destination'
     },
+    0x5c: {
+        value: 0x5c,
+        mnemonic: 'TLOAD',
+        inputs: 1,
+        outputs: 1,
+        gas: 100,
+        description: 'Load word from transient storage'
+    },
+    0x5d: {
+        value: 0x5d,
+        mnemonic: 'TSTORE',
+        inputs: 2,
+        outputs: 0,
+        gas: 100,
+        description: 'Save word to transient storage'
+    },
+    0x5e: {
+        value: 0x5e,
+        mnemonic: 'MCOPY',
+        inputs: 3,
+        outputs: 0,
+        gas: 3,
+        description: 'Copy memory to memory'
+    },
+    // PUSH0 (EIP-3855) - Added explicitly before the loop for clarity
+    0x5f: {
+        value: 0x5f,
+        mnemonic: 'PUSH0',
+        inputs: 0,
+        outputs: 1,
+        gas: 2,
+        pushBytes: 0,
+        description: 'Place 0 on stack'
+    }
 };
 
-// Generate PUSH opcodes (0x60 - 0x7f)
-for (let i = 0; i <= 32; i++) {
-    const value = 0x60 + i as OpcodeValue;
+// Generate PUSH opcodes (PUSH1 - PUSH32: 0x60 - 0x7f)
+// Note: PUSH0 (0x5f) is defined explicitly above
+for (let i = 1; i <= 32; i++) {
+    const value = (0x5f + i) as OpcodeValue;
     OPCODES[value] = {
         value,
         mnemonic: `PUSH${i}`,
@@ -546,26 +597,30 @@ for (let i = 0; i <= 32; i++) {
 }
 
 // Generate DUP opcodes (0x80 - 0x8f)
+// DUP operations duplicate stack items without consuming them
+// DUPn requires n items on stack, produces n+1 items (original n + 1 duplicate)
 for (let i = 1; i <= 16; i++) {
-    const value = 0x7f + i as OpcodeValue;
+    const value = (0x7f + i) as OpcodeValue;
     OPCODES[value] = {
         value,
         mnemonic: `DUP${i}`,
-        inputs: i,
-        outputs: i + 1,
+        inputs: 0,
+        outputs: 1,
         gas: 3,
         description: `Duplicate ${i}${i === 1 ? 'st' : i === 2 ? 'nd' : i === 3 ? 'rd' : 'th'} stack item`
     };
 }
 
 // Generate SWAP opcodes (0x90 - 0x9f)
+// SWAP operations exchange stack items without consuming or producing net items
+// SWAPn exchanges positions but maintains stack depth
 for (let i = 1; i <= 16; i++) {
-    const value = 0x8f + i as OpcodeValue;
+    const value = (0x8f + i) as OpcodeValue;
     OPCODES[value] = {
         value,
         mnemonic: `SWAP${i}`,
-        inputs: i + 1,
-        outputs: i + 1,
+        inputs: 0,
+        outputs: 0,
         gas: 3,
         description: `Exchange 1st and ${i + 1}${i + 1 === 2 ? 'nd' : i + 1 === 3 ? 'rd' : 'th'} stack items`
     };
@@ -573,7 +628,7 @@ for (let i = 1; i <= 16; i++) {
 
 // LOG opcodes (0xa0 - 0xa4)
 for (let i = 0; i <= 4; i++) {
-    const value = 0xa0 + i as OpcodeValue;
+    const value = (0xa0 + i) as OpcodeValue;
     OPCODES[value] = {
         value,
         mnemonic: `LOG${i}`,

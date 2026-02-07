@@ -1,6 +1,6 @@
 import { MNEMONIC_TO_OPCODE } from "./opcodes";
 import type { AssemblyLine, AssemblyProgram, AssemblyOptions } from "./types";
-import { hexToBytes, removeHexPrefix, isHexString, addHexPrefix } from "../utils/hex";
+import { hexToBytes, removeHexPrefix, isHexString, isOddLengthHex, normalizeHex, addHexPrefix } from "../utils/hex";
 import { concatBytes } from "../utils/bytes";
 
 /**
@@ -52,27 +52,37 @@ export class OpcodeAssembler {
             throw new Error(`Unknown mnemonic: ${mnemonic}`);
         }
 
-        // Simple opcode without immediate data
-        if (!opcode.pushBytes) {
+        // Handle PUSH0 explicitly - it takes no operand
+        if (opcode.mnemonic === 'PUSH0') {
             if (line.operand) {
                 this.warn(
-                    `Line ${lineNumber + 1}: ${mnemonic} doesn't take an operand, ignoring "${line.operand}"`
+                    `Line ${lineNumber + 1}: PUSH0 doesn't take an operand, ignoring "${line.operand}"`
                 );
             }
             return new Uint8Array([opcode.value]);
         }
 
-        // PUSH opcode - needs immediate data
-        if (!line.operand) {
-            throw new Error(`Line ${lineNumber + 1}: ${mnemonic} requires an operand`);
+        // Handle PUSH1-PUSH32 - require immediate data
+        if (opcode.pushBytes !== undefined && opcode.pushBytes > 0) {
+            if (!line.operand) {
+                throw new Error(`Line ${lineNumber + 1}: ${mnemonic} requires an operand`);
+            }
+
+            const immediateData = this.parseOperand(line.operand, opcode.pushBytes, mnemonic);
+
+            return concatBytes(
+                new Uint8Array([opcode.value]),
+                immediateData
+            );
         }
 
-        const immediateData = this.parseOperand(line.operand, opcode.pushBytes, mnemonic);
-
-        return concatBytes(
-            new Uint8Array([opcode.value]),
-            immediateData
-        );
+        // Simple opcode without immediate data
+        if (line.operand) {
+            this.warn(
+                `Line ${lineNumber + 1}: ${mnemonic} doesn't take an operand, ignoring "${line.operand}"`
+            );
+        }
+        return new Uint8Array([opcode.value]);
     }
 
     /**
@@ -84,6 +94,13 @@ export class OpcodeAssembler {
 
         // Check if it's a hex string
         if (!isHexString(operand)) {
+            // Provide helpful error for common mistake of odd-length hex
+            if (isOddLengthHex(operand)) {
+                const normalized = normalizeHex(operand);
+                throw new Error(
+                    `Invalid operand for ${mnemonic}: "${operand}" has odd length. Did you mean "${normalized}"?`
+                );
+            }
             throw new Error(
                 `Invalid operand for ${mnemonic}: "${operand}" (expected hex string)`
             );
@@ -91,31 +108,43 @@ export class OpcodeAssembler {
 
         // Convert to bytes
         const bytes = hexToBytes(addHexPrefix(operand));
-
-        // Pad or truncate to expected size
+        
         if (bytes.length < expectedBytes) {
             // Pad left with zeros (big-endian)
             const padded = new Uint8Array(expectedBytes);
             padded.set(bytes, expectedBytes - bytes.length);
             return padded;
         } else if (bytes.length > expectedBytes) {
-            // Truncate (take rightmost bytes)
+            // Truncate - take LEFTMOST (most significant) bytes
+            // This matches EVM behavior where if you somehow had extra bytes,
+            // the instruction would consume only what it needs from the beginning
             this.warn(
-                `Operand "${operand}" is larger than ${expectedBytes} bytes, truncating`
+                `Operand "${operand}" is larger than ${expectedBytes} bytes, truncating to leftmost ${expectedBytes} bytes`
             );
-            return bytes.slice(bytes.length - expectedBytes);
+            return bytes.slice(0, expectedBytes);
         }
 
         return bytes;
     }
 
     /**
-     * Get PUSH opcode for value (determines minimum size needed)
-     * Useful for optimizing: PUSH 0x01 -> PUSH1, not PUSH32
+     * Determine optimal PUSH opcode for a value
+     * Returns the minimum PUSH size needed, with 0 indicating PUSH0 should be used
+     * Useful for optimizing: PUSH 0x00 -> PUSH0, PUSH 0x01 -> PUSH1, etc.
      */
     determinePushSize(value: string): number {
         const hex = removeHexPrefix(value);
-        const bytes = Math.ceil(hex.length / 2);
+        
+        // Empty or all zeros should use PUSH0 (EIP-3855)
+        if (hex.length === 0 || /^0+$/.test(hex)) {
+            return 0;
+        }
+
+        // Calculate minimum bytes needed (removing leading zeros)
+        const trimmed = hex.replace(/^0+/, '');
+        const bytes = Math.ceil(trimmed.length / 2);
+        
+        // Clamp to valid range: 1-32 bytes
         return Math.max(1, Math.min(32, bytes));
     }
 
