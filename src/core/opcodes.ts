@@ -221,7 +221,7 @@ export const OPCODES: Record<OpcodeValue, Opcode> = {
     // 0x20: SHA3
     0x20: {
         value: 0x20,
-        mnemonic: 'SHA3',
+        mnemonic: 'KECCAK256',
         inputs: 2,
         outputs: 1,
         gas: 30,
