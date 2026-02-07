@@ -51,31 +51,39 @@ export class BytecodeParser {
     private parseNextInstruction(): Instruction {
         const pc = this.position;
         const byte = this.readByte();
-
+        
         // Look up opcode
         const opcode = OPCODES[byte];
+        
         if (!opcode) {
             this.warn(`Unknown opcode 0x${byte.toString(16).padStart(2, '0')} at position ${pc}`);
             return this.createInvalidInstruction(pc);
         }
 
-        // Handle PUSH opcodes (including PUSH0)
-        if (opcode.pushBytes !== undefined && opcode.pushBytes > 0) {
-            const immediate = this.readImmediateData(opcode.pushBytes);
-
+        // Handle PUSH opcodes
+        if (opcode.pushBytes) {
+            const [immediate, truncated] = this.readImmediateData(opcode.pushBytes);
+            
             // Warn if truncated
-            if (immediate.length < opcode.pushBytes) {
+            if (truncated) {
                 this.warn(
                     `Truncated ${opcode.mnemonic} at position ${pc}: ` +
                     `expected ${opcode.pushBytes} bytes, got ${immediate.length}`
                 );
             }
 
-            return { opcode, pc, immediate };
+            return {
+                opcode,
+                pc,
+                immediate
+            };
         }
-
-        // Regular opcode (including PUSH0 which has pushBytes: 0)
-        return { opcode, pc };
+        
+        // Regular opcode
+        return {
+            opcode,
+            pc
+        };
     }
 
     /**
@@ -89,26 +97,22 @@ export class BytecodeParser {
     }
 
     /**
-     * Read immediate data for PUSH instructions
-     * Pads with zeros on the right if truncated to match EVM behavior
-     * where incomplete PUSH data is treated as zero-padded
+     * Read immediate data for PUSH operations
      */
-    private readImmediateData(length: number): Uint8Array {
+    private readImmediateData(count: number): [Uint8Array, boolean] {
         const available = this.bytecode.length - this.position;
-        const toRead = Math.min(length, available);
-
-        // Always allocate the full expected length
-        const data = new Uint8Array(length);
-
-        // Read available bytes into the beginning of the array
+        const toRead = Math.min(count, available);
+        
+        const data = new Uint8Array(count);
+        
+        // Read available bytes
         for (let i = 0; i < toRead; i++) {
             data[i] = this.bytecode[this.position++] as number;
         }
-
-        // Remaining bytes are already zero (default Uint8Array initialization)
-        // This matches EVM behavior where truncated PUSH data is right-padded with zeros
-
-        return data;
+        
+        // Remaining bytes are implicitly 0x00 (already zero-initialized)
+        
+        return [data, toRead < count];
     }
 
     /**
