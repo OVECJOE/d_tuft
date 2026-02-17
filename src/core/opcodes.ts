@@ -217,8 +217,16 @@ export const OPCODES: Record<OpcodeValue, Opcode> = {
         gas: 3,
         description: 'Arithmetic shift right operation'
     },
+    0x1e: {
+        value: 0x1e,
+        mnemonic: 'CLZ',
+        inputs: 1,
+        outputs: 1,
+        gas: 5,
+        description: 'Count leading zero bits in a 256-bit word'
+    },
 
-    // 0x20: SHA3
+    // 0x20: KECCAK256
     0x20: {
         value: 0x20,
         mnemonic: 'KECCAK256',
