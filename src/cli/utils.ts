@@ -1,3 +1,4 @@
+import type { AssemblyLine } from '@d_tuft/core/types';
 import chalk from 'chalk';
 import { readFile } from "node:fs/promises";
 
@@ -49,4 +50,32 @@ export async function detectFormat(...args: string[]): Promise<CompareFormat[]> 
                 return 'bytecode';
         }
     }));
+}
+
+/**
+ * Parse assembly file format
+ * Supports:
+ * - One instruction per line
+ * - Comments starting with //  or #
+ * - Empty lines
+ */
+export function parseAssemblyFile(content: string): AssemblyLine[] {
+    const lines: AssemblyLine[] = [];
+
+    for (let rawLine of content.split('\n')) {
+        // Remove comments
+        rawLine = (rawLine.split('//')[0] || '').split('#')[0]?.trim() as string;
+
+        // Skip empty lines
+        if (!rawLine) continue;
+
+        // Parse instruction
+        const parts = rawLine.split(/\s+/);
+        const mnemonic = parts[0] as string;
+        const operand = parts.slice(1).join(' ') || undefined;
+
+        lines.push({ mnemonic, operand });
+    }
+
+    return lines;
 }

@@ -122,4 +122,86 @@ export interface AssemblyOptions {
     
     /** Optimize PUSH sizes */
     optimizePush?: boolean;
+
+    /** Convert to intermediate representation (array of instructions) */
+    toInstructions?: boolean;
+}
+
+/**
+ * Represents a function mapping for function selector identification
+ */
+export interface FunctionMap {
+    /** The function signature selector (first 4 bytes) */
+    selector: string;
+
+    /** The function name */
+    name?: string;
+
+    /** The start offset in the bytecode */
+    startOffset: number;
+
+    /** The end offset in the bytecode */
+    endOffset?: number;
+
+    /** The function body (bytecode chunk) containing the actual function code */
+    body: Instruction[];
+}
+
+/**
+ * A parsed ABI input/output parameter
+ */
+export interface ABIParameter {
+    /** Parameter name */
+    name: string;
+    /** Parameter type (e.g., "uint256", "address", "tuple") */
+    type: string;
+    /** For tuple types, the components of the tuple */
+    components?: ABIParameter[]; // For tuples
+}
+
+/**
+ * A single ABI entry (function, event, error, constructor)
+ */
+export interface ABIEntry {
+    /** Type of the ABI entry */
+    type: "function" | "constructor" | "receive" | "fallback" | "event" | "error";
+    /** Name of the function/event/error (not applicable for constructor/receive/fallback) */
+    name?: string;
+    /** Input parameters (for functions, events, errors) */
+    inputs?: ABIParameter[];
+    /** Output parameters (for functions) */
+    outputs?: ABIParameter[];
+    /** State mutability (for functions) */
+    stateMutability?: "pure" | "view" | "nonpayable" | "payable";
+}
+
+/**
+ * Full contract ABI - array of entries
+ */
+export type ABI = ABIEntry[];
+
+/**
+ * A single entry found in the dispatcher - one PUSH4+EQ+JUMPI triplet
+ */
+export interface DispatcherEntry {
+    /** The function selector (4-byte value) */
+    selector: string;
+
+    /** The PC of the PUSH4 instruction that loaded this selector */
+    selectorPC: number;
+
+    /** The jump destination offset (value from the PUSH2 before JUMPI) */
+    jumpDestOffset: number;
+}
+
+/**
+ * Result of a diff() comparison between two contract deployments.
+ */
+export interface SelectorDiff {
+    /** The 4-byte selector hex */
+    selector: string;
+    /** Human name if resolved via resolveNames() */
+    name?: string;
+    /** What changed */
+    kind: "added" | "removed" | "modified";
 }

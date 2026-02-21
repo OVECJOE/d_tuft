@@ -401,7 +401,7 @@ export const OPCODES: Record<OpcodeValue, Opcode> = {
     },
     0x44: {
         value: 0x44,
-        mnemonic: 'DIFFICULTY',
+        mnemonic: 'PREVRANDAO',
         inputs: 0,
         outputs: 1,
         gas: 2,

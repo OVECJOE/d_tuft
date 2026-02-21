@@ -1,5 +1,5 @@
 import { MNEMONIC_TO_OPCODE } from "./opcodes";
-import type { AssemblyLine, AssemblyProgram, AssemblyOptions } from "./types";
+import type { AssemblyLine, AssemblyProgram, AssemblyOptions, Instruction, Opcode } from "./types";
 import { hexToBytes, removeHexPrefix, isHexString, isOddLengthHex, normalizeHex, addHexPrefix } from "../utils/hex";
 import { concatBytes } from "../utils/bytes";
 
@@ -40,6 +40,34 @@ export class OpcodeAssembler {
         }
 
         return concatBytes(...bytecodeChunks);
+    }
+
+    /**
+     * Assemble to the intermediate representation (array of instructions) instead of raw bytecode
+     * Useful for analysis or transformations before final bytecode generation
+     */
+    assembleToInstructions(program: AssemblyProgram): Instruction[] {
+        this._warnings = [];
+        const instructions: Instruction[] = [];
+
+        for (let i = 0; i < program.lines.length; i++) {
+            const line = program.lines[i] as AssemblyLine;
+            try {
+                instructions.push({
+                    opcode: MNEMONIC_TO_OPCODE[line.mnemonic.toUpperCase()] as Opcode,
+                    pc: line.pc ?? 0, // If pc is not provided, default to 0 (or could calculate based on previous instructions)
+                    immediate: line.operand ? this.parseOperand(line.operand, 32, line.mnemonic) : undefined
+                });
+            } catch (error) {
+                throw new Error(
+                    `Error assembling line ${i + 1} ("${line.mnemonic}"): ${
+                        error instanceof Error ? error.message : String(error)
+                    }`
+                );
+            }
+        }
+
+        return instructions;
     }
 
     /**
@@ -162,11 +190,14 @@ export class OpcodeAssembler {
 export function assemble(
     program: AssemblyProgram | AssemblyLine[],
     options?: AssemblyOptions
-): Uint8Array {
+): Uint8Array | Instruction[] {
     const normalizedProgram: AssemblyProgram = Array.isArray(program)
         ? { lines: program, warnings: [] }
         : program;
     
     const assembler = new OpcodeAssembler(options);
+    if (options?.toInstructions) {
+        return assembler.assembleToInstructions(normalizedProgram);
+    }
     return assembler.assemble(normalizedProgram);
 }
