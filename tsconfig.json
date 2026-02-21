@@ -28,7 +28,7 @@
     "outDir": "./dist",
     "rootDir": "./src",
     "paths": {
-      "@d_tuft/*": ["./src/*"]
+      "~~/*": ["./src/*"]
     }
   },
   "include": ["src/**/*"],

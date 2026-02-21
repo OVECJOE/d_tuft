@@ -1,7 +1,7 @@
 import type { Command } from "commander";
 import { readFileSync, writeFileSync } from 'node:fs';
-import { assemble } from "@d_tuft/core";
-import { bytesToHex } from "@d_tuft/utils";
+import { assemble } from "~~/core";
+import { bytesToHex } from "~~/utils";
 import chalk from 'chalk';
 import { parseAssemblyFile, tryCatch } from "../utils";
 

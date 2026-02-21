@@ -2,9 +2,9 @@ import type { Command } from "commander";
 import { readFile } from "node:fs/promises";
 import { detectFormat, parseAssemblyFile, tryCatch } from "../utils";
 import chalk from "chalk";
-import { hexToBytes } from "@d_tuft/utils";
-import { FunctionIdentifier } from "@d_tuft/analysis/fi";
-import type { ABI, AssemblyProgram, FunctionMap } from "@d_tuft/core/types";
+import { hexToBytes } from "~~/utils";
+import { FunctionIdentifier } from "~~/analysis/fi";
+import type { ABI, AssemblyProgram, FunctionMap } from "~~/core/types";
 import { writeFileSync } from "node:fs";
 
 // ===================== Formatters =======================

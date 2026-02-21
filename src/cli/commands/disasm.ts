@@ -1,11 +1,11 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import type { Command } from "commander";
-import { formatAsText } from '@d_tuft/formats/text';
-import { formatAnnotated } from '@d_tuft/formats/annotated';
-import { formatAsJSON } from '@d_tuft/formats/json';
+import { formatAsText } from '~~/formats/text';
+import { formatAnnotated } from '~~/formats/annotated';
+import { formatAsJSON } from '~~/formats/json';
 import { tryCatch } from "../utils";
-import { hexToBytes } from "@d_tuft/utils";
-import { disassemble } from "@d_tuft/core";
+import { hexToBytes } from "~~/utils";
+import { disassemble } from "~~/core";
 import chalk from 'chalk';
 
 export default function disasm(program: Command) {

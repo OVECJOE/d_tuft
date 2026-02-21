@@ -2,9 +2,9 @@ import type { Command } from "commander";
 import { readFileSync, writeFileSync } from 'node:fs';
 import { detectFormat, parseAssemblyFile, tryCatch, type CompareFormat } from "../utils";
 import chalk from "chalk";
-import type { AssemblyLine } from "@d_tuft/core/types";
-import { bytesToHex, hexToBytes } from "@d_tuft/utils";
-import { disassemble } from "@d_tuft/core";
+import type { AssemblyLine } from "~~/core/types";
+import { bytesToHex, hexToBytes } from "~~/utils";
+import { disassemble } from "~~/core";
 
 export default function compare(program: Command) {
     program

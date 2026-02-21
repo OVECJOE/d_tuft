@@ -1,4 +1,4 @@
-import type { AssemblyLine } from '@d_tuft/core/types';
+import type { AssemblyLine } from '~~/core/types';
 import chalk from 'chalk';
 import { readFile } from "node:fs/promises";
 
