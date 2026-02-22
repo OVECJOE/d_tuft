@@ -1,4 +1,4 @@
-import { keccak_256 } from "js-sha3";
+import { keccak256 } from "js-sha3";
 import type { ABIEntry, ABIParameter } from "../../core/types";
 
 export function encodeParam(param: ABIParameter): string {
@@ -18,7 +18,7 @@ export function buildSignature(entry: ABIEntry): string {
 
 export function deriveSelector(entry: ABIEntry): string {
     const signature = buildSignature(entry);
-    return keccak_256(signature).slice(0, 8); // First 4 bytes (8 hex chars)
+    return keccak256(signature).slice(0, 8); // First 4 bytes (8 hex chars)
 }
 
 export function immediateToNumber(immediate: Uint8Array): number {

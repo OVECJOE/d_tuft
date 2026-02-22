@@ -1,4 +1,3 @@
-import { sha3_256 } from "js-sha3";
 import { assemble } from "../../core/assembler";
 import { disassemble } from "../../core/parser";
 import { OP, TERMINAL_OPCODES } from "./constants";
@@ -11,7 +10,7 @@ import type {
     Instruction
 } from "../../core/types";
 import { buildSignature, deriveSelector, immediateToNumber } from "./helpers";
-import { bytesToHex } from "../../utils";
+import { addHexPrefix, bytesToHex } from "../../utils";
 
 /**
  * Identifies, maps, and names EVM functions from dissembled bytecode.
@@ -99,7 +98,7 @@ export class FunctionIdentifier {
         for (const entry of abi) {
             if (entry.type !== "function" || !entry.name) continue;
 
-            const selector = deriveSelector(entry);
+            const selector = addHexPrefix(deriveSelector(entry));
             const existing = this.functionMaps.get(selector);
             if (existing) {
                 existing.name = buildSignature(entry);
