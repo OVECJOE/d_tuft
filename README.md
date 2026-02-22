@@ -11,6 +11,7 @@ d_tuft is a bidirectional EVM bytecode ↔ opcode transformer and analysis toolk
 - Round-trip testing for fidelity
 - Multiple output formats: text, annotated, JSON
 - Gas cost and hex byte analysis
+- identify functions, resolve names from ABI, detect internal functions, compare contracts
 
 ## Installation
 
@@ -35,6 +36,8 @@ bun run src/cli/index.ts <command> [options]
 - `compare <file1> <file2>`: Compare two files for equivalence
     - Options: `--format <format>`
 - `test <input>`: Test round-trip bytecode → opcodes → bytecode
+- **`identify <input>`** (alias: `id`): Identify functions in bytecode and analyze contract structure
+    - Options: `--format <format>`, `--abi <file>`, `-o, --output <file>`, `--internal`.
 
 Example:
 
@@ -43,5 +46,21 @@ bun run src/cli/index.ts disasm examples/2bottles-diamond.bin -o 2bottles.evm
 ```
 
 ## Project Info
+
+A man page is available for detailed CLI documentation. To view it:
+
+```bash
+# Unix/macOS
+man ./d_tuft.1
+
+# Or copy to man directory
+cp d_tuft.1 /usr/local/share/man/man1/d_tuft.1
+man d_tuft
+```
+
+Windows doesn't have native man page support, but you can:
+- View the file directly in a text editor
+- Use a third-party man viewer like `man.exe` from Git for Windows
+- Or simply refer to this README and the `d_tuft.1` file
 
 This project was created using `bun init` in bun v1.3.8. [Bun](https://bun.com) is a fast all-in-one JavaScript runtime.

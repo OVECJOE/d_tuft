@@ -1,0 +1,144 @@
+.TH D_TUFT 1 "February 2026" "d_tuft 1.0" "EVM Bytecode Toolkit"
+.SH NAME
+d_tuft \- bidirectional EVM bytecode ↔ opcode transformer and analysis toolkit
+.SH SYNOPSIS
+.B d_tuft
+[\-\-help] [\-\-version]
+.I <command>
+[\fIoptions\fR]
+.SH DESCRIPTION
+d_tuft provides CLI tools for disassembling, assembling, comparing, and analyzing Ethereum smart contract bytecode and opcodes. It supports round-trip testing, function identification, and multiple output formats.
+.SH COMMANDS
+.SS disasm (alias: d)
+Disassemble EVM bytecode to readable opcodes.
+.RS
+.TP
+\fBUsage:\fR
+.B d_tuft disasm <input> [\fIoptions\fR]
+.TP
+\fBArguments:\fR
+.I <input>\: Input bytecode file (hex string or file path)
+.TP
+\fBOptions:\fR
+\fB\-o, \-\-output <file>\fR\: Output file (defaults to stdout)
+\fB\-f, \-\-format <format>\fR\: Output format: text, annotated, json (default: text)
+\fB\-\-no\-pc\fR\: Omit program counter
+\fB\-\-gas\fR\: Include gas costs in output
+\fB\-\-hex\fR\: Include hex bytes
+.RE
+.SS asm (alias: a)
+Assemble opcodes to bytecode.
+.RS
+.TP
+\fBUsage:\fR
+.B d_tuft asm <input> [\fIoptions\fR]
+.TP
+\fBArguments:\fR
+.I <input>\: Input assembly file
+.TP
+\fBOptions:\fR
+\fB\-o, \-\-output <file>\fR\: Output file (default: stdout)
+.RE
+.SS compare (alias: c)
+Compare two bytecode or assembly files for equivalence.
+.RS
+.TP
+\fBUsage:\fR
+.B d_tuft compare <file1> <file2> [\fIoptions\fR]
+.TP
+\fBArguments:\fR
+.I <file1>\: First input file (bytecode or assembly)
+.I <file2>\: Second input file (bytecode or assembly)
+.TP
+\fBOptions:\fR
+\fB\-\-format <format>\fR\: Input format: auto, bytecode, assembly (default: auto)
+.RE
+.SS test
+Test round-trip bytecode → opcodes → bytecode fidelity.
+.RS
+.TP
+\fBUsage:\fR
+.B d_tuft test <input>
+.TP
+\fBArguments:\fR
+.I <input>\: Input bytecode (hex string or file)
+.RE
+.SS identify (alias: id)
+Identify functions in bytecode and analyze contract structure.
+.RS
+.TP
+\fBUsage:\fR
+.B d_tuft identify <input> [\fIoptions\fR]
+.TP
+\fBArguments:\fR
+.I <input>\: Input bytecode (hex string or file) or assembly file
+.TP
+\fBOptions:\fR
+\fB\-\-format <format>\fR\: Output format: text, annotated, json (default: text)
+\fB\-\-abi <file>\fR\: ABI JSON file for resolving function names
+\fB\-o, \-\-output <file>\fR\: Output file (defaults to stdout)
+\fB\-\-internal\fR\: Also list internal/private functions (orphan JUMPDESTs)
+.RE
+.SH EXAMPLES
+Disassemble bytecode:
+.IP
+.nf
+\fIUnix/macOS:\fR
+$ bun run src/cli/index.ts disasm examples/contract.bin -o output.evm
+
+\fIWindows:\fR
+> bun run src/cli/index.ts disasm examples\\contract.bin -o output.evm
+.fi
+
+Identify functions with ABI:
+.IP
+.nf
+\fIUnix/macOS:\fR
+$ bun run src/cli/index.ts identify contract.bin --abi contract.abi --format annotated
+
+\fIWindows:\fR
+> bun run src/cli/index.ts identify contract.bin --abi contract.abi --format annotated
+.fi
+
+Compare two contracts:
+.IP
+.nf
+\fIUnix/macOS:\fR
+$ bun run src/cli/index.ts compare contract1.evm contract2.evm
+
+\fIWindows:\fR
+> bun run src/cli/index.ts compare contract1.evm contract2.evm
+.fi
+
+.SH PLATFORM NOTES
+.SS Unix/macOS
+Use standard path separators (/). Commands can be chained with pipes.
+.SS Windows
+Use backslashes (\\) in paths or quote paths with spaces. PowerShell and CMD support the same command syntax. On Windows, you may need to use quotes around paths with backslashes:
+.IP
+.nf
+> bun run src/cli/index.ts disasm "C:\\path\\to\\contract.bin"
+.fi
+
+.SH OUTPUT FORMATS
+.TP
+\fBtext\fR
+Human-readable format with optional PC, gas, and hex byte annotations.
+.TP
+\fBannotated\fR
+Detailed format with box-drawing characters, gas costs, and full instruction details.
+.TP
+\fBjson\fR
+Machine-readable JSON output for programmatic processing.
+.SH EXIT STATUS
+.TP
+0
+Success
+.TP
+1
+Error (invalid input, mismatch, or operation failure)
+.SH SEE ALSO
+.BR evm (1),
+.BR solc (1)
+.SH AUTHOR
+d_tuft was created using bun init in bun v1.3.8.
