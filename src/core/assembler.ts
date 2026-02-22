@@ -49,15 +49,47 @@ export class OpcodeAssembler {
     assembleToInstructions(program: AssemblyProgram): Instruction[] {
         this._warnings = [];
         const instructions: Instruction[] = [];
+        let pc = 0; // Track the current program counter as we assemble
 
         for (let i = 0; i < program.lines.length; i++) {
             const line = program.lines[i] as AssemblyLine;
             try {
-                instructions.push({
-                    opcode: MNEMONIC_TO_OPCODE[line.mnemonic.toUpperCase()] as Opcode,
-                    pc: line.pc ?? 0, // If pc is not provided, default to 0 (or could calculate based on previous instructions)
-                    immediate: line.operand ? this.parseOperand(line.operand, 32, line.mnemonic) : undefined
-                });
+                const mnemonic = line.mnemonic.toUpperCase();
+                const opcode = MNEMONIC_TO_OPCODE[mnemonic] as Opcode;
+                
+                if (!opcode) {
+                    throw new Error(`Unknown mnemonic: ${mnemonic}`);
+                }
+
+                const instruction: Instruction = {
+                    opcode,
+                    pc,
+                    immediate: undefined
+                };
+
+                // Handle PUSH0 - 1 byte total
+                if (opcode.mnemonic === 'PUSH0') {
+                    pc += 1;
+                }
+                // Handle PUSH1-PUSH32 - 1 byte opcode + pushBytes
+                else if (opcode.pushBytes !== undefined && opcode.pushBytes > 0) {
+                    if (!line.operand) {
+                        throw new Error(`Line ${i + 1}: ${mnemonic} requires an operand`);
+                    }
+                    instruction.immediate = this.parseOperand(line.operand, opcode.pushBytes, mnemonic);
+                    pc += 1 + opcode.pushBytes;
+                }
+                // Simple opcode without immediate data - 1 byte
+                else {
+                    if (line.operand) {
+                        this.warn(
+                            `Line ${i + 1}: ${mnemonic} doesn't take an operand, ignoring "${line.operand}"`
+                        );
+                    }
+                    pc += 1;
+                }
+
+                instructions.push(instruction);
             } catch (error) {
                 throw new Error(
                     `Error assembling line ${i + 1} ("${line.mnemonic}"): ${
