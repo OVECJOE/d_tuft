@@ -12,7 +12,7 @@ export function formatAnnotated(result: DisassemblyResult): string {
     lines.push('╠═══════════════════════════════════════════════════════════════╣');
     lines.push(`║ Total Size: ${result.totalBytes.toString().padEnd(50, ' ')}║`);
     lines.push(`║ Instructions: ${result.instructions.length.toString().padEnd(48, ' ')}║`);
-    lines.push(`║ Jump Destinations: ${result.jumpDestinations.size.toString().padEnd(42, ' ')}║`);
+    lines.push(`║ Jump Destinations: ${result.jumpDestinations.size.toString().padEnd(43, ' ')}║`);
     lines.push('╠═══════════════════════════════════════════════════════════════╣');
     lines.push('║  PC   │ OPCODE       │ OPERAND                 │ STACK EFFECT ║');
     lines.push('╠═══════╪══════════════╪═════════════════════════╪══════════════╣');

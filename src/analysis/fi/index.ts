@@ -59,9 +59,11 @@ export class FunctionIdentifier {
         const entries = this.findDispatcher();
         if (entries.length === 0) return [];
 
+        const functionStarts = new Set(entries.map((e) => e.jumpDestOffset));
+
         for (const entry of entries) {
             const startOffset = entry.jumpDestOffset;
-            const endOffset = this.findFunctionEnd(startOffset);
+            const endOffset = this.findFunctionEnd(startOffset, functionStarts);
             const body = this.sliceBody(startOffset, endOffset);
 
             const map: FunctionMap = {
@@ -98,7 +100,7 @@ export class FunctionIdentifier {
         for (const entry of abi) {
             if (entry.type !== "function" || !entry.name) continue;
 
-            const selector = addHexPrefix(deriveSelector(entry));
+            const selector = deriveSelector(entry).toLowerCase();
             const existing = this.functionMaps.get(selector);
             if (existing) {
                 existing.name = buildSignature(entry);
@@ -198,65 +200,41 @@ export class FunctionIdentifier {
     }
 
     /**
-     * Scan instructions from the top for the PUSH4+EQ+JUMPI pattern that
-     * forms the function dispatcher.
-     * 
-     * EVM compilers (solc, vyper) emit one block per public function:
-     * 
-     *   PUSH4 <selector> // push 4-byte selector
-     *   DUP1 // (solc >= 0.8 sometimes emits DUP1 here)
-     *   EQ // compare with calldata selector
-     *   PUSH2 <dest> // push jump destination
-     *   JUMPI // conditional jump to function body if match
-     * 
-     * We tolerate DUP1 between PUSH4 and EQ since solc emits it when there are multiple functions
-     * (it DUPs the calldata selector before each EQ to avoid reloading it).
-     * The window search below handles this naturally.
-     * 
-     * Stops scanning once we leave the dispatcher region - detected by encountering
-     * a JUMPDEST at a position referenced by a dispatcher entry, which marks the start
-     * of actual function bodies.
-     */
+       * Scan instructions from the top for the PUSH4+EQ+JUMPI pattern that
+       * forms the function dispatcher.
+       */
     private findDispatcher(): DispatcherEntry[] {
         const entries: DispatcherEntry[] = [];
         const len = this.instructions.length;
-
-        // Collect jump destinations from dispatcher entries as we find them
-        // so we know when to stop (first JUMPDEST that IS a function entry)
         const functionStarts = new Set<number>();
 
         for (let i = 0; i < len; i++) {
             const instr = this.instructions[i];
 
-            // Stop when we hit a JUMPDEST that's already been registered as a function start - we've left the dispatcher region
             if (
-                instr?.opcode.value === OP.JUMPDEST
-                && functionStarts.has(instr.pc)
-                && entries.length > 0
+                instr?.opcode.value === OP.JUMPDEST &&
+                functionStarts.has(instr.pc) &&
+                entries.length > 0
             ) break;
 
-            // Look for PUSH4 - the selector load
             if (instr?.opcode.value !== OP.PUSH4 || !instr.immediate) continue;
 
-            const selector = bytesToHex(instr.immediate);
+            const raw = bytesToHex(instr.immediate);
+            const selector = raw.replace(/^0x/i, "").toLowerCase();
             const selectorPC = instr.pc;
 
-            // Lookahead window: find EQ and PUSH2/PUSH1 + JUMPI within the
-            // next 5 instructions (tolerates DUP1 and compiler variations)
             let eqFound = false;
             let destOffset: number | null = null;
-            
-            const windowEnd = Math.min(i + 5, len);
+            const windowEnd = Math.min(i + 8, len);
+
             for (let j = i + 1; j < windowEnd; j++) {
                 const w = this.instructions[j] as Instruction;
-        
                 if (w?.opcode.value === OP.EQ) {
                     eqFound = true;
                     continue;
                 }
-
-                // PUSH1 or PUSH2 carrying the jump destination
-                if (eqFound &&
+                if (
+                    eqFound &&
                     w.opcode.value >= OP.PUSH1 &&
                     w.opcode.value <= OP.PUSH2 &&
                     w.immediate
@@ -264,19 +242,11 @@ export class FunctionIdentifier {
                     destOffset = immediateToNumber(w.immediate);
                     continue;
                 }
-
                 if (eqFound && destOffset !== null && w.opcode.value === OP.JUMPI) {
-                    // Valid dispatcher entry found
-                    entries.push({
-                        selector,
-                        selectorPC,
-                        jumpDestOffset: destOffset,
-                    });
+                    entries.push({ selector, selectorPC, jumpDestOffset: destOffset });
                     functionStarts.add(destOffset);
                     break;
                 }
-
-                // Abort lookahead on unexpected terminal opcodes
                 if (TERMINAL_OPCODES.has(w.opcode.value)) break;
             }
         }
@@ -294,57 +264,117 @@ export class FunctionIdentifier {
      * Handles nested control flow (loops, if/else) by tracking a depth counter for conditional jumps:
      * we only consider the function ended when we reach a terminal at depth 0.
      */
-    private findFunctionEnd(startOffset: number): number {
+    private findFunctionEnd(startOffset: number, functionStarts: Set<number>): number {
         const startIdx = this.pcIndex.get(startOffset);
+        if (startIdx === undefined) return startOffset;
 
-        if (startIdx === undefined) {
-            // Offset not found - defensive fallback
-            return startOffset;
-        }
-
-        // Confirm the entry point is indeed a JUMPDEST
         const entry = this.instructions[startIdx];
-        if (entry?.opcode.value !== OP.JUMPDEST) {
-            return startOffset;
-        }
+        if (entry?.opcode.value !== OP.JUMPDEST) return startOffset;
 
-        let depth = 0; // tracking nesting of conditional jumps
+        const visited = new Set<number>(); // visited instruction indices
+        const worklist: number[] = [startIdx]; // indices to process
+        let maxPC = startOffset;
 
-        for (let i = startIdx + 1; i < this.instructions.length; i++) {
-            const instr = this.instructions[i] as Instruction;
+        while (worklist.length > 0) {
+            const idx = worklist.pop()!;
+            if (visited.has(idx)) continue;
+            visited.add(idx);
+
+            const instr = this.instructions[idx];
+            if (!instr) continue;
+
+            // Cap at another public function's entry point (but allow our own start).
+            if (instr.pc !== startOffset && functionStarts.has(instr.pc)) continue;
+
+            if (instr.pc > maxPC) maxPC = instr.pc;
+
             const op = instr.opcode.value;
 
-            // JUMPDEST encountered mid-scan = entering a nested block (loop body, else branch)
-            // Track depth so we don't stop prematurely.
-            if (op === OP.JUMPDEST) {
-                depth++;
-                continue;
-            }
+            // Terminal — this branch ends here, don't follow fall-through.
+            if (TERMINAL_OPCODES.has(op)) continue;
 
-            if (TERMINAL_OPCODES.has(op)) {
-                if (depth === 0) {
-                    return instr?.pc || startOffset; // End of function body
+            // Unconditional JUMP — resolve target from the preceding PUSH immediate.
+            // Fall-through is NOT reachable after an unconditional jump.
+            if (op === OP.JUMP) {
+                const target = this.resolveJumpTarget(idx);
+                if (target !== null) {
+                    const targetIdx = this.pcIndex.get(target);
+                    if (
+                        targetIdx !== undefined &&
+                        !visited.has(targetIdx) &&
+                        // Back-edge guard: if target is before start it's a loop into
+                        // a shared helper — don't follow to avoid escaping the function.
+                        this.instructions[targetIdx]!.pc >= startOffset
+                    ) {
+                        worklist.push(targetIdx);
+                    }
                 }
-                depth = Math.max(0, depth - 1);
+                continue; // do NOT enqueue fall-through
+            }
+
+            // Conditional JUMPI — both fall-through (idx+1) and taken branch are reachable.
+            if (op === OP.JUMPI) {
+                const target = this.resolveJumpTarget(idx);
+                if (target !== null) {
+                    const targetIdx = this.pcIndex.get(target);
+                    if (
+                        targetIdx !== undefined &&
+                        !visited.has(targetIdx) &&
+                        this.instructions[targetIdx]!.pc >= startOffset
+                    ) {
+                        worklist.push(targetIdx);
+                    }
+                }
+                // Fall-through is always reachable (when condition is false).
+                if (idx + 1 < this.instructions.length && !visited.has(idx + 1)) {
+                    worklist.push(idx + 1);
+                }
                 continue;
             }
 
-            // Unconditional JUMP at depth 0 is an exist (tail call / return
-            // via shared cleanup block). At depth > 0 it's a loop back-edge.
-            if (op === OP.JUMP && depth === 0) {
-                return instr?.pc || startOffset;
+            // Normal instruction — fall through to next.
+            if (idx + 1 < this.instructions.length && !visited.has(idx + 1)) {
+                const next = this.instructions[idx + 1]!;
+                if (next.pc !== startOffset && functionStarts.has(next.pc)) continue;
+                worklist.push(idx + 1);
             }
         }
 
-        // Fell off the end of bytecode without finding a terminal -
-        // return the PC of the last instruction as a safe fallback.
-        return this.instructions[this.instructions.length - 1]?.pc || startOffset;
+        return maxPC;
     }
 
     /**
-     * Slice instructions between startOffset and endOffset (inclusive).
-     * Uses the PC index for 0(1) start lookup.
+     * Resolve a JUMP or JUMPI target by walking backwards from the jump
+     * instruction to find the most recent PUSH that supplies the destination.
+     *
+     * This covers the overwhelming majority of real-world compiled EVM code
+     * where the pattern is:
+     *   PUSH2 <dest>
+     *   JUMPI            (or JUMP)
+     *
+     * Returns null when the target cannot be statically determined (e.g. when
+     * the destination comes from a dynamic computation rather than a literal PUSH).
      */
+    private resolveJumpTarget(jumpIdx: number): number | null {
+        // Walk backwards up to 5 slots looking for a PUSH with an immediate.
+        for (let k = jumpIdx - 1; k >= Math.max(0, jumpIdx - 5); k--) {
+            const prev = this.instructions[k];
+            if (!prev) continue;
+            const op = prev.opcode.value;
+            if (op >= OP.PUSH1 && op <= OP.PUSH32 && prev.immediate) {
+                return immediateToNumber(prev.immediate);
+            }
+            // If we hit another jump or a non-push opcode that isn't a DUP/SWAP
+            // (which are stack-manipulation but don't introduce new values), stop.
+            // DUP/SWAP range: 0x80-0x9f
+            if (op < 0x80 || op > 0x9f) break;
+        }
+        return null;
+    }
+
+    /**
+   * Slice instructions between startOffset and endOffset (inclusive).
+   */
     private sliceBody(startOffset: number, endOffset: number): Instruction[] {
         const startIdx = this.pcIndex.get(startOffset);
         if (startIdx === undefined) return [];
@@ -355,26 +385,21 @@ export class FunctionIdentifier {
             body.push(instr);
             if (instr.pc >= endOffset) break;
         }
-
         return body;
     }
 
-       /**
+    /**
      * Normalise either input form into Instruction[].
-     * This is the ONLY place that touches the raw input — everything else
-     * works on this.instructions.
      */
     private static normalize(program: Uint8Array | AssemblyProgram): Instruction[] {
         if (program instanceof Uint8Array) {
             return disassemble(program).instructions;
         }
-        // assemble() with toInstructions:true returns Instruction[] directly
         return assemble(program, { toInstructions: true }) as Instruction[];
     }
 
     /**
-     * Build a Map<pc, index> for O(1) instruction lookup by program counter.
-     * Called once at construction time.
+     * Build a Map<PC, index> for O(1) instruction lookup by program counter.
      */
     private static buildPCIndex(instructions: Instruction[]): Map<number, number> {
         const index = new Map<number, number>();
@@ -386,19 +411,15 @@ export class FunctionIdentifier {
 
     /**
      * Compare two instruction bodies for logical equivalence.
-     * Ignores PC values (position-independent comparison) - 
-     * only opcode values and immediate bytes matter.
+     * Ignores PC values — only opcode values and immediate bytes matter.
      */
     private static bodiesEqual(a: Instruction[], b: Instruction[]): boolean {
         if (a.length !== b.length) return false;
-
         for (let i = 0; i < a.length; i++) {
             if (a[i]?.opcode.value !== b[i]?.opcode.value) return false;
-
             const immA = a[i]!.immediate;
             const immB = b[i]!.immediate;
-
-            if ((immA === undefined) !== (immB === undefined)) return false; // One has immediate, the other doesn't
+            if ((immA === undefined) !== (immB === undefined)) return false;
             if (immA && immB) {
                 if (immA.length !== immB.length) return false;
                 for (let j = 0; j < immA.length; j++) {
@@ -406,7 +427,6 @@ export class FunctionIdentifier {
                 }
             }
         }
-
         return true;
     }
 }

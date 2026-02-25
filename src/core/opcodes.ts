@@ -612,8 +612,8 @@ for (let i = 1; i <= 16; i++) {
     OPCODES[value] = {
         value,
         mnemonic: `DUP${i}`,
-        inputs: 0,
-        outputs: 1,
+        inputs: i,
+        outputs: i + 1,
         gas: 3,
         description: `Duplicate ${i}${i === 1 ? 'st' : i === 2 ? 'nd' : i === 3 ? 'rd' : 'th'} stack item`
     };
@@ -627,8 +627,8 @@ for (let i = 1; i <= 16; i++) {
     OPCODES[value] = {
         value,
         mnemonic: `SWAP${i}`,
-        inputs: 0,
-        outputs: 0,
+        inputs: i + 1,
+        outputs: i + 1,
         gas: 3,
         description: `Exchange 1st and ${i + 1}${i + 1 === 2 ? 'nd' : i + 1 === 3 ? 'rd' : 'th'} stack items`
     };

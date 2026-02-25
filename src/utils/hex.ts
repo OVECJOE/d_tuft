@@ -50,6 +50,11 @@ export function removeHexPrefix(hex: string): string {
  */
 export function hexToBytes(hex: string): Uint8Array {
     const cleaned = removeHexPrefix(hex);
+
+    if (isOddLengthHex(cleaned)) {
+        throw new Error(`Invalid hex string "${hex}": odd number of hex digits. Use normalizeHex() to pad it`);
+    }
+
     if (!isHexString(cleaned)) {
         throw new Error(`Invalid hex string: ${hex}`);
     }
