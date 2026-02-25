@@ -4,3 +4,5 @@ export { default as disasm } from './disasm';
 export { default as asm } from './asm';
 export { default as identify } from './identify';
 export { default as diff } from './diff';
+export { default as gas } from './gas';
+export { default as stack } from './stack';

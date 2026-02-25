@@ -77,13 +77,13 @@ export interface DisassemblyResult {
 export interface AssemblyLine {
     /** Program counter (optional for input) */
     pc?: number;
-    
+
     /** Opcode mnemonic */
     mnemonic: string;
-    
+
     /** Operand (for PUSH operations) */
     operand?: string;
-    
+
     /** Optional comment */
     comment?: string;
 }
@@ -119,7 +119,7 @@ export interface DisassemblyOptions {
 export interface AssemblyOptions {
     /** Validate jump destinations */
     validateJumps?: boolean;
-    
+
     /** Optimize PUSH sizes */
     optimizePush?: boolean;
 
@@ -204,4 +204,102 @@ export interface SelectorDiff {
     name?: string;
     /** What changed */
     kind: "added" | "removed" | "modified";
+}
+
+/**
+ * Per-opcode gas breakdown entry
+ */
+export interface OpcodeGasEntry {
+    /** Number of times this opcode appears */
+    count: number;
+    /** Total gas consumed by all instances of this opcode */
+    gas: number;
+}
+
+/**
+ * Full gas analysis report for an instruction sequence
+ */
+export interface GasReport {
+    /** Sum of all instruction gas costs */
+    totalGas: number;
+    /** Number of instructions analysed */
+    instructionCount: number;
+    /** Gas breakdown keyed by opcode mnemonic */
+    byOpcode: Map<string, OpcodeGasEntry>;
+    /** Gas breakdown keyed by category (arithmetic, storage, etc.) */
+    byCategory: Map<string, number>;
+}
+
+/**
+ * Gas estimate for a single identified function body
+ */
+export interface FunctionGasEstimate {
+    /** Function selector (4-byte hex), if known */
+    selector?: string;
+    /** Resolved function name, if known */
+    name?: string;
+    /** Total estimated gas for the function body */
+    totalGas: number;
+    /** Number of instructions in the function body */
+    instructionCount: number;
+    /** Gas breakdown keyed by opcode mnemonic */
+    byOpcode: Map<string, OpcodeGasEntry>;
+}
+
+/**
+ * A contiguous range of expensive instructions
+ */
+export interface GasHotspot {
+    /** PC of the first instruction in the window */
+    startPC: number;
+    /** PC of the last instruction in the window */
+    endPC: number;
+    /** Total gas consumed by instructions in the window */
+    gas: number;
+    /** The instructions within the window */
+    instructions: Instruction[];
+}
+
+/**
+ * Stack error detected during simulation
+ */
+export interface StackError {
+    /** Program counter where the error was detected */
+    pc: number;
+    /** Mnemonic of the instruction that caused the error */
+    mnemonic: string;
+    /** Error classification */
+    kind: 'underflow' | 'overflow' | 'unbalanced';
+    /** Human-readable description of the error */
+    message: string;
+}
+
+/**
+ * Full result of a linear stack simulation pass
+ */
+export interface SimulationResult {
+    /** Whether simulation completed without errors */
+    success: boolean;
+    /** Maximum stack depth reached during simulation */
+    maxDepth: number;
+    /** Minimum stack depth reached during simulation */
+    minDepth: number;
+    /** Stack depth after the last instruction */
+    finalDepth: number;
+    /** All errors detected during simulation */
+    errors: StackError[];
+    /** Stack depth at each program counter */
+    depthAtPC: Map<number, number>;
+}
+
+/**
+ * Compact stack depth profile
+ */
+export interface StackProfile {
+    /** Maximum stack depth reached */
+    maxDepth: number;
+    /** Stack depth after the last instruction */
+    finalDepth: number;
+    /** Stack depth at each program counter */
+    depthMap: Map<number, number>;
 }

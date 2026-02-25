@@ -169,6 +169,9 @@ export class FunctionIdentifier {
         const theirMaps = other.identify();
         const theirBySelector = new Map(theirMaps.map((m) => [m.selector, m]));
 
+        const ourStarts = new Set(ourMaps.map((m) => m.startOffset));
+        const theirStarts = new Set(theirMaps.map((m) => m.startOffset));
+
         for (const ours of ourMaps) {
             const theirs = theirBySelector.get(ours.selector);
             if (!theirs) {
@@ -180,7 +183,14 @@ export class FunctionIdentifier {
                 continue;
             }
 
-            if (!FunctionIdentifier.bodiesEqual(ours.body, theirs.body)) {
+            const ourLocal = FunctionIdentifier.normalizeBody(
+                FunctionIdentifier.extractLocalBody(ours, ourStarts)
+            );
+            const theirLocal = FunctionIdentifier.normalizeBody(
+                FunctionIdentifier.extractLocalBody(theirs, theirStarts)
+            );
+
+            if (!FunctionIdentifier.bodiesEqual(ourLocal, theirLocal)) {
                 diffs.push({ selector: ours.selector, name: ours.name, kind: "modified" });
             }
         }
@@ -428,5 +438,49 @@ export class FunctionIdentifier {
             }
         }
         return true;
+    }
+
+    /**
+     * Extract only the instructions within a function's own contiguous PC
+     * region, excluding shared internal helpers that live at other addresses.
+     * The boundary is the next public function's start offset.
+     */
+    private static extractLocalBody(map: FunctionMap, allStarts: Set<number>): Instruction[] {
+        const sorted = Array.from(allStarts).sort((a, b) => a - b);
+        const idx = sorted.indexOf(map.startOffset);
+        const nextStart = idx >= 0 && idx + 1 < sorted.length
+            ? sorted[idx + 1] as number
+            : Infinity;
+
+        return map.body.filter(
+            (instr) => instr.pc >= map.startOffset && instr.pc < nextStart
+        );
+    }
+
+    /**
+     * Zero out PUSH immediates that feed directly into JUMP or JUMPI.
+     * These are absolute addresses that change when code is relocated
+     * without any actual logic change.
+     *
+     * Returns a shallow copy — the original instruction array is not mutated.
+     */
+    private static normalizeBody(body: Instruction[]): Instruction[] {
+        return body.map((instr, i) => {
+            if (!instr.immediate) return instr;
+
+            const op = instr.opcode.value;
+            if (op < OP.PUSH1 || op > OP.PUSH32) return instr;
+
+            const next = body[i + 1];
+            if (!next) return instr;
+
+            const nextOp = next.opcode.value;
+            if (nextOp !== OP.JUMP && nextOp !== OP.JUMPI) return instr;
+
+            return {
+                ...instr,
+                immediate: new Uint8Array(instr.immediate.length),
+            };
+        });
     }
 }

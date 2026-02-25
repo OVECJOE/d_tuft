@@ -17,6 +17,7 @@ import {
 } from "../utils";
 import { hexToBytes } from "~~/utils";
 import { disassemble } from "~~/core";
+import { StackSimulator } from "~~/utils/stack-simulator";
 import chalk from 'chalk';
 
 export default function disasm(program: Command) {
@@ -30,6 +31,7 @@ export default function disasm(program: Command) {
         .option('--no-pc', 'Omit program counter from output')
         .option('--gas', 'Include gas cost per instruction')
         .option('--hex', 'Include raw hex bytes per instruction')
+        .option('--stack', 'Run stack depth validation after disassembly')
         .action(async (input: string, options) => {
             await tryCatch(async () => {
                 console.log(sectionHeader("Disassembly"));
@@ -100,6 +102,29 @@ export default function disasm(program: Command) {
                     for (const w of result.warnings) {
                         console.log(warn(w));
                     }
+                }
+
+                if (options.stack) {
+                    const sim = new StackSimulator();
+                    const simResult = sim.simulate(result.instructions);
+                    console.log('');
+                    console.log(sectionHeader('Stack Validation'));
+                    console.log(kv('Max depth:', chalk.cyan(String(simResult.maxDepth))));
+                    console.log(kv('Final depth:', String(simResult.finalDepth)));
+                    console.log(kv('Errors:', simResult.errors.length === 0
+                        ? chalk.green('0 — valid')
+                        : chalk.red(String(simResult.errors.length))));
+
+                    if (simResult.errors.length > 0) {
+                        for (const err of simResult.errors.slice(0, 10)) {
+                            const icon = err.kind === 'underflow' ? chalk.red('↓') : chalk.red('↑');
+                            console.log(`  ${icon} ${chalk.gray(`PC ${err.pc}`)} ${chalk.white(err.mnemonic.padEnd(12))} ${chalk.red(err.kind)}`);
+                        }
+                        if (simResult.errors.length > 10) {
+                            console.log(chalk.gray(`  … ${simResult.errors.length - 10} more`));
+                        }
+                    }
+                    console.log(sectionFooter());
                 }
             });
         });

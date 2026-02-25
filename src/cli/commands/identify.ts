@@ -21,6 +21,7 @@ import { FunctionIdentifier } from "~~/analysis/fi";
 import type { ABI, AssemblyProgram } from "~~/core/types";
 import { writeFileSync } from "node:fs";
 import { formatFunctionsAsText, formatFunctionsAsJSON, formatFunctionsAnnotated } from "~~/formats";
+import { GasCalculator } from "~~/utils/gas-calculator";
 
 export default function identify(program: Command) {
     program
@@ -33,11 +34,13 @@ export default function identify(program: Command) {
         .option("-d, --diff <second_input>", "Compare functions between two inputs")
         .option("-o, --output <file>", "Write output to file (default: stdout)")
         .option("--internal", "Also list internal/private functions (orphan JUMPDESTs)")
+        .option("--gas", "Show gas cost estimates per function")
         .action(async (input: string, options: {
             format: "text" | "annotated" | "json";
             abi?: string;
             output?: string;
             internal: boolean;
+            gas: boolean;
         }) => {
             const validFormats = ["text", "annotated", "json"];
             if (!validFormats.includes(options.format)) {
@@ -133,6 +136,25 @@ export default function identify(program: Command) {
                 console.log(kv("Total functions:", String(maps.length)));
                 console.log(kv("Named:", named > 0 ? chalk.green(String(named)) : '0'));
                 console.log(kv("Unnamed:", unnamed > 0 ? chalk.yellow(String(unnamed)) : '0'));
+
+                if (options.gas && maps.length > 0) {
+                    const gc = new GasCalculator();
+                    const estimates = maps
+                        .map((m) => gc.estimateFunction(m.body, m.selector, m.name))
+                        .sort((a, b) => b.totalGas - a.totalGas);
+
+                    console.log('');
+                    console.log(sectionHeader('Gas per Function'));
+                    console.log(
+                        `  ${chalk.gray('Selector'.padEnd(12))} ${chalk.gray('Name'.padEnd(24))} ${chalk.gray('Instr'.padStart(6))} ${chalk.gray('Gas'.padStart(8))}`
+                    );
+                    for (const fn of estimates) {
+                        console.log(
+                            `  ${chalk.cyan((fn.selector ?? '').padEnd(12))} ${chalk.white((fn.name ?? '<unknown>').padEnd(24))} ${String(fn.instructionCount).padStart(6)} ${chalk.yellow(String(fn.totalGas).padStart(8))}`
+                        );
+                    }
+                    console.log(sectionFooter());
+                }
             });
         });
 }
