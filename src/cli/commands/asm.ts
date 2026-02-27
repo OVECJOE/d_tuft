@@ -2,8 +2,10 @@ import type { Command } from "commander";
 import { readFileSync, writeFileSync } from 'node:fs';
 import { assemble } from "~~/core";
 import { bytesToHex } from "~~/utils";
-import chalk from 'chalk';
 import { parseAssemblyFile, tryCatch, sectionHeader, sectionFooter, success, error, hint, kv } from "../utils";
+import { T } from '~~/cli/ui';
+import { colorizeOpcode, colorizeImmediate } from "~~/formats/colors";
+import { padR } from '~~/cli/ui/ansi';
 
 export default function asm(program: Command) {
     program
@@ -15,8 +17,8 @@ export default function asm(program: Command) {
         .action(async (input, options) => {
             await tryCatch(async () => {
                 console.error(sectionHeader("Assembly"));
-                console.error(kv("Input:", input));
-                console.error(kv("Output:", options.output ?? 'stdout'));
+                console.error(kv("Input:", T.val.filename(input)));
+                console.error(kv("Output:", options.output ? T.val.filename(options.output) : T.text.muted('stdout')));
                 console.error(sectionFooter());
 
                 let content: string;
@@ -29,19 +31,29 @@ export default function asm(program: Command) {
                 }
 
                 const lines = parseAssemblyFile(content);
-                console.error(chalk.gray(`  Found ${lines.length} instruction(s)`));
+
+                // Colorized instruction preview
+                console.error(T.chrome.border(`  ┌─ ${lines.length} instruction(s) ${'─'.repeat(Math.max(0, 44 - String(lines.length).length))}`));
+                for (const line of lines) {
+                    const colorizer = colorizeOpcode(line.mnemonic);
+                    const mnemonicStr = padR(colorizer(line.mnemonic), 12);
+                    const operandStr = line.operand ? colorizeImmediate(line.operand) : '';
+                    console.error(`  ${T.chrome.border('│')} ${mnemonicStr}  ${operandStr}`);
+                }
+                console.error(T.chrome.border(`  └${'─'.repeat(47)}`));
 
                 const bytecode = assemble({ lines, warnings: [] }) as Uint8Array;
                 const output = bytesToHex(bytecode);
 
+                console.error('');
+                console.error(success(
+                    `Assembled ${T.val.number(String(lines.length))} instructions → ${T.val.number(String(bytecode.length))} bytes`
+                ));
+
                 if (options.output) {
                     writeFileSync(options.output, output);
-                    console.error('');
-                    console.error(success(`Assembled ${lines.length} instructions → ${bytecode.length} bytes`));
-                    console.error(success(`Output written to ${options.output}`));
+                    console.error(success(`Output written to ${T.val.filename(options.output)}`));
                 } else {
-                    console.error('');
-                    console.error(success(`Assembled ${lines.length} instructions → ${bytecode.length} bytes`));
                     console.log(output);
                 }
 

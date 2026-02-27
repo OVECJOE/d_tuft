@@ -4,21 +4,15 @@ import { formatAsText } from '~~/formats/text';
 import { formatAnnotated } from '~~/formats/annotated';
 import { formatAsJSON } from '~~/formats/json';
 import {
-    tryCatch,
-    startSpinner,
-    stopSpinner,
-    success,
-    error,
-    hint,
-    warn,
-    sectionHeader,
-    sectionFooter,
-    kv
+    tryCatch, startSpinner, stopSpinner,
+    success, error, hint, warn, sectionHeader, sectionFooter, kv
 } from "../utils";
 import { hexToBytes } from "~~/utils";
 import { disassemble } from "~~/core";
 import { StackSimulator } from "~~/utils/stack-simulator";
-import chalk from 'chalk';
+import { T } from '~~/cli/ui';
+import { colorizeOpcode } from '~~/formats/colors';
+import { padR } from '~~/cli/ui/ansi';
 
 export default function disasm(program: Command) {
     program
@@ -35,9 +29,9 @@ export default function disasm(program: Command) {
         .action(async (input: string, options) => {
             await tryCatch(async () => {
                 console.log(sectionHeader("Disassembly"));
-                console.log(kv("Input:", input));
-                console.log(kv("Format:", options.format));
-                if (options.gas) console.log(kv("Show gas:", "Yes"));
+                console.log(kv("Input:", T.val.filename(input)));
+                console.log(kv("Format:", T.val.format(options.format)));
+                if (options.gas) console.log(kv("Show gas:", T.status.success("Yes")));
                 console.log(sectionFooter());
 
                 startSpinner("Reading input…");
@@ -56,8 +50,7 @@ export default function disasm(program: Command) {
                     process.exit(1);
                 }
                 stopSpinner();
-
-                console.log(success(`Loaded ${bytecode.length} bytes`));
+                console.log(success(`Loaded ${T.val.number(String(bytecode.length))} bytes`));
 
                 startSpinner("Disassembling…");
                 const result = disassemble(bytecode, {
@@ -90,18 +83,16 @@ export default function disasm(program: Command) {
                 if (options.output) {
                     writeFileSync(options.output, output);
                     console.log('');
-                    console.log(success(`Output written to ${options.output}`));
+                    console.log(success(`Output written to ${T.val.filename(options.output)}`));
                 }
 
                 console.log(sectionFooter());
-                console.log(kv("Instructions:", String(result.instructions.length)));
-                console.log(kv("Jump destinations:", String(result.jumpDestinations.size)));
+                console.log(kv("Instructions:", T.val.number(String(result.instructions.length))));
+                console.log(kv("Jump destinations:", T.op.jumpdest(String(result.jumpDestinations.size))));
 
                 if (result.warnings.length > 0) {
                     console.log('');
-                    for (const w of result.warnings) {
-                        console.log(warn(w));
-                    }
+                    for (const w of result.warnings) console.log(warn(w));
                 }
 
                 if (options.stack) {
@@ -109,20 +100,25 @@ export default function disasm(program: Command) {
                     const simResult = sim.simulate(result.instructions);
                     console.log('');
                     console.log(sectionHeader('Stack Validation'));
-                    console.log(kv('Max depth:', chalk.cyan(String(simResult.maxDepth))));
+                    console.log(kv('Max depth:', T.val.number(String(simResult.maxDepth))));
                     console.log(kv('Final depth:', String(simResult.finalDepth)));
-                    console.log(kv('Errors:', simResult.errors.length === 0
-                        ? chalk.green('0 — valid')
-                        : chalk.red(String(simResult.errors.length))));
+                    console.log(kv('Errors:',
+                        simResult.errors.length === 0
+                            ? T.status.success('0 — valid')
+                            : T.status.error(String(simResult.errors.length))
+                    ));
 
-                    if (simResult.errors.length > 0) {
-                        for (const err of simResult.errors.slice(0, 10)) {
-                            const icon = err.kind === 'underflow' ? chalk.red('↓') : chalk.red('↑');
-                            console.log(`  ${icon} ${chalk.gray(`PC ${err.pc}`)} ${chalk.white(err.mnemonic.padEnd(12))} ${chalk.red(err.kind)}`);
-                        }
-                        if (simResult.errors.length > 10) {
-                            console.log(chalk.gray(`  … ${simResult.errors.length - 10} more`));
-                        }
+                    for (const err of simResult.errors.slice(0, 10)) {
+                        const icon = err.kind === 'underflow'
+                            ? T.status.error('↓')
+                            : T.status.error('↑');
+                        const mnemColor = colorizeOpcode(err.mnemonic);
+                        console.log(
+                            `  ${icon} ${T.val.pc(`PC ${err.pc}`)} ${padR(mnemColor(err.mnemonic), 12)} ${T.status.error(err.kind)}`
+                        );
+                    }
+                    if (simResult.errors.length > 10) {
+                        console.log(T.text.muted(`  … ${simResult.errors.length - 10} more`));
                     }
                     console.log(sectionFooter());
                 }

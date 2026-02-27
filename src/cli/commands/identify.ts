@@ -1,27 +1,17 @@
 import type { Command } from "commander";
 import { readFile } from "node:fs/promises";
 import {
-    detectFormat,
-    parseAssemblyFile,
-    tryCatch,
-    startSpinner,
-    updateSpinner,
-    stopSpinner,
-    success,
-    error,
-    info,
-    hint,
-    sectionHeader,
-    sectionFooter,
-    kv
+    detectFormat, parseAssemblyFile, tryCatch,
+    startSpinner, updateSpinner, stopSpinner,
+    success, error, info, hint, sectionHeader, sectionFooter, kv,
 } from "../utils";
-import chalk from 'chalk';
 import { hexToBytes } from "~~/utils";
 import { FunctionIdentifier } from "~~/analysis/fi";
 import type { ABI, AssemblyProgram } from "~~/core/types";
 import { writeFileSync } from "node:fs";
 import { formatFunctionsAsText, formatFunctionsAsJSON, formatFunctionsAnnotated } from "~~/formats";
 import { GasCalculator } from "~~/utils/gas-calculator";
+import { T } from '~~/cli/ui';
 
 export default function identify(program: Command) {
     program
@@ -51,19 +41,19 @@ export default function identify(program: Command) {
 
             await tryCatch(async () => {
                 console.log(sectionHeader("Function Identification"));
-                console.log(kv("Input:", input));
-                console.log(kv("Format:", options.format));
-                if (options.abi) console.log(kv("ABI:", options.abi));
+                console.log(kv("Input:", T.val.filename(input)));
+                console.log(kv("Format:", T.val.format(options.format)));
+                if (options.abi) console.log(kv("ABI:", T.val.filename(options.abi)));
                 console.log(sectionFooter());
 
                 startSpinner("Reading input…");
-                let source: Uint8Array | AssemblyProgram;
                 const content = await readFile(input, "utf-8");
                 const [format] = await detectFormat(input);
                 stopSpinner();
 
-                console.log(success(`Loaded ${input} (${chalk.cyan(format)})`));
+                console.log(success(`Loaded ${T.val.filename(input)} (${T.val.format(format)})`));
 
+                let source: Uint8Array | AssemblyProgram;
                 if (format === "bytecode") {
                     source = hexToBytes(content.trim());
                 } else {
@@ -82,30 +72,23 @@ export default function identify(program: Command) {
                     const abi = JSON.parse(abiContent) as ABI;
                     maps = fi.resolveNames(abi);
                     stopSpinner();
-                    const resolved = maps.filter((m) => m.name).length;
-                    console.log(success(`Resolved ${resolved}/${maps.length} function name(s) from ABI`));
+                    const resolved = maps.filter(m => m.name).length;
+                    console.log(success(`Resolved ${T.val.number(String(resolved))}/${maps.length} function name(s) from ABI`));
                 }
 
-                const named = maps.filter((m) => m.name).length;
+                const named = maps.filter(m => m.name).length;
                 const unnamed = maps.length - named;
 
-                console.log(info(
-                    `${maps.length} function(s) found` +
-                    (named > 0 ? chalk.gray(` · ${chalk.green(named + ' named')}`) : '') +
-                    (unnamed > 0 ? chalk.gray(` · ${chalk.yellow(unnamed + ' unnamed')}`) : '')
-                ));
+                const parts: string[] = [`${maps.length} function(s) found`];
+                if (named > 0) parts.push(T.status.success(`${named} named`));
+                if (unnamed > 0) parts.push(T.status.warn(`${unnamed} unnamed`));
+                console.log(info(parts.join(T.text.muted(' · '))));
 
                 let out: string;
                 switch (options.format) {
-                    case "annotated":
-                        out = formatFunctionsAnnotated(maps);
-                        break;
-                    case "json":
-                        out = formatFunctionsAsJSON(maps);
-                        break;
-                    case "text":
-                    default:
-                        out = formatFunctionsAsText(maps);
+                    case "annotated": out = formatFunctionsAnnotated(maps); break;
+                    case "json": out = formatFunctionsAsJSON(maps); break;
+                    default: out = formatFunctionsAsText(maps);
                 }
 
                 if (options.internal) {
@@ -113,13 +96,12 @@ export default function identify(program: Command) {
                     const internalSection = internals.length > 0
                         ? [
                             "",
-                            chalk.magenta(sectionHeader(`Internal functions (${internals.length})`)),
-                            ...internals.map((i) =>
-                                `  ${chalk.gray(`@${i.pc}`)}  ${chalk.gray("JUMPDEST")}`
+                            T.op.jumpdest(sectionHeader(`Internal functions (${internals.length})`)),
+                            ...internals.map(i =>
+                                `  ${T.val.pc(`@${i.pc}`)}  ${T.op.jumpdest('JUMPDEST')}`
                             ),
                         ].join("\n")
-                        : '\n' + chalk.gray("  No internal JUMPDESTs found.");
-
+                        : '\n' + T.text.muted("  No internal JUMPDESTs found.");
                     out += internalSection;
                 }
 
@@ -127,30 +109,34 @@ export default function identify(program: Command) {
                 console.log(out);
 
                 if (options.output) {
-                    writeFileSync(options.output, out.replace(/\x1b\[[0-9;]*m/g, ""));
+                    writeFileSync(options.output, out.replace(/\x1b\[[0-9;]*[A-Za-z]/g, ""));
                     console.log('');
-                    console.log(success(`Output written to ${options.output}`));
+                    console.log(success(`Output written to ${T.val.filename(options.output)}`));
                 }
 
                 console.log(sectionFooter());
-                console.log(kv("Total functions:", String(maps.length)));
-                console.log(kv("Named:", named > 0 ? chalk.green(String(named)) : '0'));
-                console.log(kv("Unnamed:", unnamed > 0 ? chalk.yellow(String(unnamed)) : '0'));
+                console.log(kv("Total functions:", T.val.number(String(maps.length))));
+                console.log(kv("Named:", named > 0 ? T.status.success(String(named)) : '0'));
+                console.log(kv("Unnamed:", unnamed > 0 ? T.status.warn(String(unnamed)) : '0'));
 
                 if (options.gas && maps.length > 0) {
                     const gc = new GasCalculator();
                     const estimates = maps
-                        .map((m) => gc.estimateFunction(m.body, m.selector, m.name))
+                        .map(m => gc.estimateFunction(m.body, m.selector, m.name))
                         .sort((a, b) => b.totalGas - a.totalGas);
 
                     console.log('');
                     console.log(sectionHeader('Gas per Function'));
                     console.log(
-                        `  ${chalk.gray('Selector'.padEnd(12))} ${chalk.gray('Name'.padEnd(24))} ${chalk.gray('Instr'.padStart(6))} ${chalk.gray('Gas'.padStart(8))}`
+                        `  ${T.text.key('Selector'.padEnd(12))} ${T.text.key('Name'.padEnd(24))} ` +
+                        `${T.text.key('Instr'.padStart(6))} ${T.text.key('Gas'.padStart(8))}`
                     );
                     for (const fn of estimates) {
                         console.log(
-                            `  ${chalk.cyan((fn.selector ?? '').padEnd(12))} ${chalk.white((fn.name ?? '<unknown>').padEnd(24))} ${String(fn.instructionCount).padStart(6)} ${chalk.yellow(String(fn.totalGas).padStart(8))}`
+                            `  ${T.val.selector((fn.selector ?? '').padEnd(12))} ` +
+                            `${T.text.body((fn.name ?? '<unknown>').padEnd(24))} ` +
+                            `${String(fn.instructionCount).padStart(6)} ` +
+                            `${T.status.warn(String(fn.totalGas).padStart(8))}`
                         );
                     }
                     console.log(sectionFooter());

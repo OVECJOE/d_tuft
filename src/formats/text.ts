@@ -1,5 +1,14 @@
 import type { DisassemblyResult, Instruction } from "../core/types";
 import { bytesToHex } from "../utils/hex";
+import { T } from '~~/cli/ui/theme';
+import { padR } from '~~/cli/ui/ansi';
+import {
+    colorizeOpcode,
+    colorizePC,
+    colorizeImmediate,
+    colorizeGas,
+    colorizeHexComment,
+} from "./colors";
 
 export interface TextFormatOptions {
     includePC?: boolean;
@@ -8,9 +17,7 @@ export interface TextFormatOptions {
     indentSize?: number;
 }
 
-/**
- * Format disassembly as human-readable text
- */
+/** Format disassembly as human-readable, colorized text */
 export function formatAsText(
     result: DisassemblyResult,
     options: TextFormatOptions = {}
@@ -26,72 +33,68 @@ export function formatAsText(
     const indent = ' '.repeat(indentSize);
 
     // Header
-    lines.push(`${indent}Disassembly (${result.totalBytes} bytes)`);
-    lines.push(`${indent}${'='.repeat(50)}`);
+    lines.push(`${indent}${T.text.muted('Disassembly')}  ${T.val.number(`${result.totalBytes} bytes`)}`);
+    lines.push(`${indent}${T.chrome.sep('─'.repeat(50))}`);
     lines.push('');
 
     // Instructions
     for (const instruction of result.instructions) {
-        lines.push(indent + formatInstruction(instruction, {
-            includePC,
-            includeGas,
-            includeHex
-        }));
+        lines.push(indent + formatInstruction(instruction, { includePC, includeGas, includeHex }));
     }
 
     // Warnings
     if (result.warnings.length > 0) {
         lines.push('');
-        lines.push(`${indent}Warnings:`);
+        lines.push(`${indent}${T.status.warn('Warnings:')}`);
         for (const warning of result.warnings) {
-            lines.push(`${indent} - ${warning}`);
+            lines.push(`${indent}  ${T.status.warn('⚠')} ${T.status.warn(warning)}`);
         }
     }
 
-    // JUMP destinations
+    // Jump destinations
     if (result.jumpDestinations.size > 0) {
         lines.push('');
-        lines.push(`${indent}Valid Jump Destinations:`);
-        lines.push(`${indent}  ${Array.from(result.jumpDestinations).sort((a, b) => a - b).join(', ')}`);
+        lines.push(`${indent}${T.op.jumpdest('Jump Destinations:')}`);
+        const dests = Array.from(result.jumpDestinations).sort((a, b) => a - b);
+        lines.push(`${indent}  ${dests.map(d => T.op.jumpdest(String(d))).join(T.chrome.sep(', '))}`);
     }
 
     return lines.join('\n');
 }
 
-/**
- * Format a single instruction
- */
+/** Format a single instruction with rich per-field colors */
 export function formatInstruction(
     instruction: Instruction,
     options: Partial<TextFormatOptions> = {}
 ): string {
     const parts: string[] = [];
-    
-    // Program counter
+
+    // PC  [00042]
     if (options.includePC !== false) {
-        parts.push(`[${instruction.pc.toString().padStart(5, '0')}]`);
+        parts.push(colorizePC(`[${instruction.pc.toString().padStart(5, '0')}]`));
     }
-    
-    // Mnemonic
-    parts.push(instruction.opcode.mnemonic.padEnd(12, ' '));
-    
-    // Operand (for PUSH)
+
+    // Mnemonic — right-padded to 12 chars *inside* the colorizer via padR
+    const colorizer = colorizeOpcode(instruction.opcode.mnemonic, instruction.opcode.value);
+    parts.push(padR(colorizer(instruction.opcode.mnemonic), 12));
+
+    // Immediate (PUSH operand)
     if (instruction.immediate) {
-        parts.push(bytesToHex(instruction.immediate));
+        parts.push(colorizeImmediate(bytesToHex(instruction.immediate)));
     }
-    
+
     // Gas cost
     if (options.includeGas) {
-        parts.push(`(${instruction.opcode.gas} gas)`);
+        parts.push(colorizeGas(instruction.opcode.gas));
     }
-    
-    // Hex bytes
+
+    // Raw hex bytes
     if (options.includeHex) {
         const hex = instruction.immediate
             ? `${instruction.opcode.value.toString(16).padStart(2, '0')} ${bytesToHex(instruction.immediate).slice(2)}`
             : instruction.opcode.value.toString(16).padStart(2, '0');
-        parts.push(`// 0x${hex}`);
+        parts.push(colorizeHexComment(`0x${hex}`));
     }
-    
+
     return parts.join(' ');
 }
