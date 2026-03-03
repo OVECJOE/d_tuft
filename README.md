@@ -17,8 +17,18 @@ d_tuft is a bidirectional EVM bytecode ↔ opcode transformer and analysis toolk
 
 ## Installation
 
+> Assuming you cloned the repo and want to test it out
+
 ```bash
 bun install
+```
+
+> Assuming you want to install as a Linux command
+
+```bash
+wget -qO- https://raw.githubusercontent.com/OVECJOE/d_tuft/main/install.sh | bash
+# or with curl:
+curl -fsSL https://raw.githubusercontent.com/OVECJOE/d_tuft/main/install.sh | bash
 ```
 
 ## Usage
