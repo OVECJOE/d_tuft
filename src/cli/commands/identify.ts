@@ -8,7 +8,8 @@ import {
 import { hexToBytes } from "~~/utils";
 import { FunctionIdentifier } from "~~/analysis/fi";
 import type { ABI, AssemblyProgram } from "~~/core/types";
-import { writeFileSync } from "node:fs";
+import { writeFileSync, mkdirSync } from "node:fs";
+import { join } from "node:path";
 import { formatFunctionsAsText, formatFunctionsAsJSON, formatFunctionsAnnotated } from "~~/formats";
 import { GasCalculator } from "~~/utils/gas-calculator";
 import { T, Table } from '~~/cli/ui';
@@ -22,13 +23,13 @@ export default function identify(program: Command) {
         .option("--format <format>", "Output format: text, annotated, json", "text")
         .option("--abi <file>", "ABI JSON file for resolving function names")
         .option("-d, --diff <second_input>", "Compare functions between two inputs")
-        .option("-o, --output <file>", "Write output to file (default: stdout)")
+        .option("-o, --output [dir]", "Save each function to its own file inside a named directory")
         .option("--internal", "Also list internal/private functions (orphan JUMPDESTs)")
         .option("--gas", "Show gas cost estimates per function")
         .action(async (input: string, options: {
             format: "text" | "annotated" | "json";
             abi?: string;
-            output?: string;
+            output?: string | boolean;
             internal: boolean;
             gas: boolean;
         }) => {
@@ -105,13 +106,29 @@ export default function identify(program: Command) {
                     out += internalSection;
                 }
 
-                console.log(sectionHeader("Results"));
-                console.log(out);
+                if (options.output === undefined) {
+                    console.log(sectionHeader("Results"));
+                    console.log(out);
+                }
 
-                if (options.output) {
-                    writeFileSync(options.output, out.replace(/\x1b\[[0-9;]*[A-Za-z]/g, ""));
+                if (options.output !== undefined) {
+                    const stripped = (s: string) => s.replace(/\x1b\[[0-9;]*[A-Za-z]/g, "");
+                    const raw = typeof options.output === "string" ? options.output : "functions";
+                    const fnDir = raw.startsWith("(") && raw.endsWith(")")
+                        ? raw
+                        : `(${raw})`;
+
+                    mkdirSync(fnDir, { recursive: true });
+
+                    for (const fn of maps) {
+                        const label = fn.name
+                            ? fn.name.replace(/\//g, "-")
+                            : fn.selector;
+                        writeFileSync(join(fnDir, `${label}.txt`), stripped(formatFunctionsAnnotated([fn])));
+                    }
+
                     console.log('');
-                    console.log(success(`Output written to ${T.val.filename(options.output)}`));
+                    console.log(success(`${maps.length} function file(s) written to ${T.val.filename(fnDir)}`));
                 }
 
                 console.log(sectionFooter());
