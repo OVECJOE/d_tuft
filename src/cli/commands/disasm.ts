@@ -10,9 +10,8 @@ import {
 import { hexToBytes } from "~~/utils";
 import { disassemble } from "~~/core";
 import { StackSimulator } from "~~/utils/stack-simulator";
-import { T } from '~~/cli/ui';
+import { T, Panel, Table } from '~~/cli/ui';
 import { colorizeOpcode } from '~~/formats/colors';
-import { padR } from '~~/cli/ui/ansi';
 
 export default function disasm(program: Command) {
     program
@@ -99,26 +98,36 @@ export default function disasm(program: Command) {
                     const sim = new StackSimulator();
                     const simResult = sim.simulate(result.instructions);
                     console.log('');
-                    console.log(sectionHeader('Stack Validation'));
-                    console.log(kv('Max depth:', T.val.number(String(simResult.maxDepth))));
-                    console.log(kv('Final depth:', String(simResult.finalDepth)));
-                    console.log(kv('Errors:',
-                        simResult.errors.length === 0
-                            ? T.status.success('0 — valid')
-                            : T.status.error(String(simResult.errors.length))
-                    ));
 
-                    for (const err of simResult.errors.slice(0, 10)) {
-                        const icon = err.kind === 'underflow'
-                            ? T.status.error('↓')
-                            : T.status.error('↑');
-                        const mnemColor = colorizeOpcode(err.mnemonic);
-                        console.log(
-                            `  ${icon} ${T.val.pc(`PC ${err.pc}`)} ${padR(mnemColor(err.mnemonic), 12)} ${T.status.error(err.kind)}`
-                        );
-                    }
-                    if (simResult.errors.length > 10) {
-                        console.log(T.text.muted(`  … ${simResult.errors.length - 10} more`));
+                    console.log(Panel.create('Stack Validation')
+                        .stat('Max depth', String(simResult.maxDepth), T.val.number)
+                        .stat('Final depth', String(simResult.finalDepth), T.text.body)
+                        .stat(
+                            'Errors',
+                            simResult.errors.length === 0 ? '0 — valid' : String(simResult.errors.length),
+                            simResult.errors.length === 0 ? T.status.success : T.status.error,
+                        )
+                        .render()
+                    );
+
+                    if (simResult.errors.length > 0) {
+                        console.log('');
+                        const errTable = Table.create()
+                            .column('', 2, { render: v => T.status.error(v) })
+                            .column('PC', 7, { render: v => T.val.pc(v) })
+                            .column('Opcode', 12, { render: v => colorizeOpcode(v)(v) })
+                            .column('Kind', 10, { render: v => T.status.error(v) });
+
+                        for (const err of simResult.errors.slice(0, 10)) {
+                            const icon = err.kind === 'underflow' ? '↓' : '↑';
+                            errTable.row([icon, String(err.pc), err.mnemonic, err.kind], 'error');
+                        }
+
+                        console.log(errTable.render());
+
+                        if (simResult.errors.length > 10) {
+                            console.log(T.text.muted(`  … ${simResult.errors.length - 10} more`));
+                        }
                     }
                     console.log(sectionFooter());
                 }

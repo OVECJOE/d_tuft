@@ -1,7 +1,7 @@
 import type { Command } from 'commander';
 import { readFileSync } from 'node:fs';
 import { tryCatch, sectionHeader, sectionFooter, success, error, kv, box } from "../utils";
-import { T } from '~~/cli/ui';
+import { T, Panel } from '~~/cli/ui';
 import type { AssemblyLine } from "~~/core/types";
 import { bytesToHex, hexToBytes } from "~~/utils";
 import { disassemble } from "~~/core";
@@ -73,6 +73,20 @@ export default function roundtrip(program: Command) {
                 }
 
                 console.log(sectionFooter());
+                console.log('');
+
+                console.log(Panel.create('Round-Trip Summary')
+                    .stat('Input', input, T.val.filename)
+                    .separator()
+                    .stat('Original size', `${originalBytecode.length} bytes`, T.val.number)
+                    .stat('Reassembled size', `${reassembledBytecode.length} bytes`, T.val.number)
+                    .stat(
+                        'Byte differences',
+                        String(differences),
+                        differences === 0 ? T.status.success : T.status.error,
+                    )
+                    .render()
+                );
                 console.log('');
 
                 if (differences === 0) {

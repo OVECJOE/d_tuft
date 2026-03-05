@@ -8,7 +8,7 @@ import {
 } from "../utils";
 import { formatDiffAsText, formatDiffAsJSON, formatDiffAnnotated } from "~~/formats";
 import type { AssemblyProgram } from "~~/core/types";
-import { T } from '~~/cli/ui';
+import { T, Panel } from '~~/cli/ui';
 
 export default function diff(program: Command) {
     program
@@ -79,11 +79,15 @@ export default function diff(program: Command) {
                     console.log('');
                     console.log(box(`${T.status.success('✓')} No functional differences found.`, 'IDENTICAL'));
                 } else {
-                    const parts: string[] = [];
-                    if (added) parts.push(T.diff.added(`${added} added`));
-                    if (removed) parts.push(T.diff.removed(`${removed} removed`));
-                    if (modified) parts.push(T.diff.modified(`${modified} modified`));
-                    console.log(info(parts.join(T.text.muted('  ·  '))));
+                    console.log('');
+                    console.log(Panel.create('Diff Summary')
+                        .stat('Added', String(added), T.diff.added)
+                        .stat('Removed', String(removed), T.diff.removed)
+                        .stat('Modified', String(modified), T.diff.modified)
+                        .separator()
+                        .stat('Total changes', String(total), T.status.warn)
+                        .render()
+                    );
                     console.log('');
 
                     const maps1 = fi1.identify();

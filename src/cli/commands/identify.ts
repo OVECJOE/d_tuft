@@ -11,7 +11,7 @@ import type { ABI, AssemblyProgram } from "~~/core/types";
 import { writeFileSync } from "node:fs";
 import { formatFunctionsAsText, formatFunctionsAsJSON, formatFunctionsAnnotated } from "~~/formats";
 import { GasCalculator } from "~~/utils/gas-calculator";
-import { T } from '~~/cli/ui';
+import { T, Table } from '~~/cli/ui';
 
 export default function identify(program: Command) {
     program
@@ -127,18 +127,23 @@ export default function identify(program: Command) {
 
                     console.log('');
                     console.log(sectionHeader('Gas per Function'));
-                    console.log(
-                        `  ${T.text.key('Selector'.padEnd(12))} ${T.text.key('Name'.padEnd(24))} ` +
-                        `${T.text.key('Instr'.padStart(6))} ${T.text.key('Gas'.padStart(8))}`
-                    );
+
+                    const gasTable = Table.create()
+                        .column('Selector', 12, { render: v => T.val.selector(v) })
+                        .column('Name', 24, { render: v => T.text.body(v) })
+                        .column('Instr', 7, { align: 'right', render: v => T.val.number(v) })
+                        .column('Gas', 10, { align: 'right', render: v => T.status.warn(v) });
+
                     for (const fn of estimates) {
-                        console.log(
-                            `  ${T.val.selector((fn.selector ?? '').padEnd(12))} ` +
-                            `${T.text.body((fn.name ?? '<unknown>').padEnd(24))} ` +
-                            `${String(fn.instructionCount).padStart(6)} ` +
-                            `${T.status.warn(String(fn.totalGas).padStart(8))}`
-                        );
+                        gasTable.row([
+                            fn.selector ?? '',
+                            fn.name ?? '<unknown>',
+                            String(fn.instructionCount),
+                            String(fn.totalGas),
+                        ]);
                     }
+
+                    console.log(gasTable.render());
                     console.log(sectionFooter());
                 }
             });

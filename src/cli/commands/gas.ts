@@ -8,7 +8,7 @@ import { hexToBytes } from "~~/utils";
 import { GasCalculator } from "~~/utils/gas-calculator";
 import { disassemble } from "~~/core";
 import { FunctionIdentifier } from "~~/analysis/fi";
-import { T } from '~~/cli/ui';
+import { T, Table, Panel } from '~~/cli/ui';
 import { colorizeOpcode, colorizeImmediate } from '~~/formats/colors';
 import { padR } from '~~/cli/ui/ansi';
 
@@ -24,8 +24,6 @@ export default function gas(program: Command) {
         .action(async (input: string, options: { top: string; window: string; functions: boolean }) => {
             await tryCatch(async () => {
                 console.log(sectionHeader("Gas Analysis"));
-                console.log(kv("Input:", T.val.filename(input)));
-                console.log(sectionFooter());
 
                 startSpinner("Reading input…");
                 let bytecode: Uint8Array;
@@ -51,12 +49,18 @@ export default function gas(program: Command) {
                 const gc = new GasCalculator();
                 const report = gc.analyze(result.instructions);
 
-                console.log(sectionHeader("Overview"));
-                console.log(kv("Instructions:", T.val.number(String(report.instructionCount))));
-                console.log(kv("Total gas:", T.status.warn(String(report.totalGas))));
-                console.log("");
+                // ── Overview Panel ────────────────────────────────────────────
+                console.log('');
+                console.log(Panel.create("Gas Overview")
+                    .stat("Input", input, T.val.filename)
+                    .separator()
+                    .stat("Instructions", String(report.instructionCount), T.val.number)
+                    .stat("Total gas", String(report.totalGas), T.status.warn)
+                    .render()
+                );
 
                 // ── Gas by category bar chart ─────────────────────────────────
+                console.log('');
                 console.log(sectionHeader("Gas by Category"));
                 const categories = [...report.byCategory.entries()].sort((a, b) => b[1] - a[1]);
                 const maxCatGas = categories[0]?.[1] ?? 1;
@@ -78,18 +82,18 @@ export default function gas(program: Command) {
                     .sort((a, b) => b[1].gas - a[1].gas)
                     .slice(0, 10);
 
-                console.log(
-                    `  ${T.text.key('Opcode'.padEnd(14))} ${T.text.key('Count'.padStart(6))} ` +
-                    `${T.text.key('Gas'.padStart(8))} ${T.text.key('Avg'.padStart(6))}`
-                );
+                const opcodeTable = Table.create()
+                    .column("Opcode", 14, { render: v => colorizeOpcode(v)(v) })
+                    .column("Count", 8, { align: 'right', render: v => T.val.number(v) })
+                    .column("Gas", 10, { align: 'right', render: v => T.status.warn(v) })
+                    .column("Avg gas", 8, { align: 'right', render: v => T.text.muted(v) });
+
                 for (const [mn, entry] of topOpcodes) {
                     const avg = (entry.gas / entry.count).toFixed(1);
-                    const colorizer = colorizeOpcode(mn);
-                    console.log(
-                        `  ${padR(colorizer(mn), 14)} ${String(entry.count).padStart(6)} ` +
-                        `${T.status.warn(String(entry.gas).padStart(8))} ${T.text.muted(avg.padStart(6))}`
-                    );
+                    opcodeTable.row([mn, String(entry.count), String(entry.gas), avg]);
                 }
+
+                console.log(opcodeTable.render());
                 console.log("");
 
                 // ── Hotspots ──────────────────────────────────────────────────
@@ -136,18 +140,22 @@ export default function gas(program: Command) {
                         .map((m) => gc.estimateFunction(m.body, m.selector, m.name))
                         .sort((a, b) => b.totalGas - a.totalGas);
 
-                    console.log(
-                        `  ${T.text.key('Selector'.padEnd(12))} ${T.text.key('Name'.padEnd(24))} ` +
-                        `${T.text.key('Instr'.padStart(6))} ${T.text.key('Gas'.padStart(8))}`
-                    );
+                    const fnTable = Table.create()
+                        .column("Selector", 12, { render: v => T.val.selector(v) })
+                        .column("Name", 24, { render: v => T.text.body(v) })
+                        .column("Instr", 7, { align: 'right', render: v => T.val.number(v) })
+                        .column("Gas", 10, { align: 'right', render: v => T.status.warn(v) });
+
                     for (const fn of fnEstimates) {
-                        console.log(
-                            `  ${T.val.selector((fn.selector ?? '').padEnd(12))} ` +
-                            `${T.text.body((fn.name ?? '<unknown>').padEnd(24))} ` +
-                            `${String(fn.instructionCount).padStart(6)} ` +
-                            `${T.status.warn(String(fn.totalGas).padStart(8))}`
-                        );
+                        fnTable.row([
+                            fn.selector ?? '',
+                            fn.name ?? '<unknown>',
+                            String(fn.instructionCount),
+                            String(fn.totalGas),
+                        ]);
                     }
+
+                    console.log(fnTable.render());
                     console.log("");
                 }
 

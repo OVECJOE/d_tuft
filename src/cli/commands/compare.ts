@@ -8,9 +8,8 @@ import {
 import type { AssemblyLine } from "~~/core/types";
 import { bytesToHex, hexToBytes } from "~~/utils";
 import { disassemble } from "~~/core";
-import { T } from '~~/cli/ui';
+import { T, Table } from '~~/cli/ui';
 import { colorizeOpcode } from '~~/formats/colors';
-import { padR } from '~~/cli/ui/ansi';
 
 export default function compare(program: Command) {
     program
@@ -84,6 +83,12 @@ export default function compare(program: Command) {
 
                 console.log(sectionHeader("Results"));
 
+                const diffTable = Table.create()
+                    .column("Line", 6, { align: 'right', render: v => T.text.muted(v) })
+                    .column(file1, 30, { render: v => T.diff.removed(v) })
+                    .column(file2, 30, { render: v => T.diff.added(v) })
+                    .column("Status", 12, { render: v => T.status.error(v) });
+
                 let differences = 0;
                 const maxLines = Math.max(lines1.length, lines2.length);
 
@@ -92,28 +97,26 @@ export default function compare(program: Command) {
                     const line2 = lines2[i];
 
                     if (!line1) {
-                        const c2 = colorizeOpcode(line2!.mnemonic);
-                        console.log(error(`Line ${i + 1}: only in ${file2} — ${padR(c2(line2!.mnemonic), 12)} ${line2?.operand ?? ''}`));
+                        const op2 = `${line2!.mnemonic}${line2?.operand ? ' ' + line2.operand : ''}`;
+                        diffTable.row([String(i + 1), '', op2, 'only in file2'], 'error');
                         differences++;
                         continue;
                     }
                     if (!line2) {
-                        const c1 = colorizeOpcode(line1.mnemonic);
-                        console.log(error(`Line ${i + 1}: only in ${file1} — ${padR(c1(line1.mnemonic), 12)} ${line1.operand ?? ''}`));
+                        const op1 = `${line1.mnemonic}${line1.operand ? ' ' + line1.operand : ''}`;
+                        diffTable.row([String(i + 1), op1, '', 'only in file1'], 'error');
                         differences++;
                         continue;
                     }
                     if (line1.mnemonic !== line2.mnemonic || line1.operand !== line2.operand) {
-                        const c1 = colorizeOpcode(line1.mnemonic);
-                        const c2 = colorizeOpcode(line2.mnemonic);
-                        console.log(
-                            error(`Line ${i + 1}:`) +
-                            `\n    ${T.text.muted(file1 + ':')} ${T.diff.removed(line1.mnemonic)} ${line1.operand || ''}` +
-                            `\n    ${T.text.muted(file2 + ':')} ${T.diff.added(line2.mnemonic)} ${line2.operand || ''}`
-                        );
+                        const op1 = `${line1.mnemonic}${line1.operand ? ' ' + line1.operand : ''}`;
+                        const op2 = `${line2.mnemonic}${line2.operand ? ' ' + line2.operand : ''}`;
+                        diffTable.row([String(i + 1), op1, op2, 'changed'], 'error');
                         differences++;
                     }
                 }
+
+                if (differences > 0) console.log(diffTable.render());
 
                 console.log(sectionFooter());
                 console.log('');
