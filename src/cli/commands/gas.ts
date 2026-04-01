@@ -7,7 +7,7 @@ import {
 import { hexToBytes } from "~~/utils";
 import { GasCalculator } from "~~/utils/gas-calculator";
 import { disassemble } from "~~/core";
-import { FunctionIdentifier } from "~~/analysis/fi";
+import { FunctionIdentifier } from "~~/libraries/fi";
 import { T, Table, Panel } from '~~/cli/ui';
 import { colorizeOpcode, colorizeImmediate } from '~~/formats/colors';
 import { padR } from '~~/cli/ui/ansi';

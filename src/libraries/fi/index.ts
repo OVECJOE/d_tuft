@@ -10,7 +10,7 @@ import type {
     Instruction
 } from "../../core/types";
 import { buildSignature, deriveSelector, immediateToNumber } from "./helpers";
-import { addHexPrefix, bytesToHex } from "../../utils";
+import { bytesToHex } from "../../utils";
 
 /**
  * Identifies, maps, and names EVM functions from dissembled bytecode.

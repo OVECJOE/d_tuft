@@ -1,5 +1,5 @@
 import { hexToBytes } from "~~/utils";
-import { FunctionIdentifier } from "~~/analysis/fi";
+import { FunctionIdentifier } from "~~/libraries/fi";
 import type { Command } from "commander";
 import {
     readAndDetectFiles, tryCatch, parseAssemblyFile,

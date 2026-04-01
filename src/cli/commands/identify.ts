@@ -6,7 +6,7 @@ import {
     success, error, info, hint, sectionHeader, sectionFooter, kv,
 } from "../utils";
 import { hexToBytes } from "~~/utils";
-import { FunctionIdentifier } from "~~/analysis/fi";
+import { FunctionIdentifier } from "~~/libraries/fi";
 import type { ABI, AssemblyProgram } from "~~/core/types";
 import { writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";

@@ -130,5 +130,17 @@ if ! echo ":${PATH}:" | grep -q ":${INSTALL_DIR}:"; then
   warn "Then restart your shell or run: source ~/.bashrc (or equivalent)"
 fi
 
+# ================== MAN PAGE INSTALLATION =================
+MAN_DIR="/usr/local/share/man/man1"
+if [[ -w "$MAN_DIR" ]]; then
+  sudo cp "$REPO_DIR/man/${TOOL_NAME}.1" "$MAN_DIR/"
+  sudo chmod 644 "$MAN_DIR/${TOOL_NAME}.1"
+  mandb &>/dev/null || true
+  success "Man page installed to ${MAN_DIR}/${TOOL_NAME}.1"
+else
+  warn "No write access to ${MAN_DIR}, skipping man page installation."
+  warn "You can manually copy ${REPO_DIR}/man/${TOOL_NAME}.1 to a directory in your MANPATH to enable 'man ${TOOL_NAME}'"
+fi
+
 success "${TOOL_NAME} installed successfully!"
 success "Run '${TOOL_NAME} --help' to get started."
