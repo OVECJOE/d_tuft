@@ -136,7 +136,11 @@ if [[ ! -d "$MAN_DIR" ]]; then
   warn "Man directory ${MAN_DIR} does not exist. Creating it..."
   if [[ -w "/usr/local/share/man" ]]; then
     mkdir -p "$MAN_DIR"
-    success
+    success "Created man directory at ${MAN_DIR}"
+  else 
+    die "Cannot create man directory at ${MAN_DIR}. Please create it manually and re-run the script to install the man page."
+  fi
+fi
 
 if [[ -w "$MAN_DIR" ]]; then
   sudo cp "$REPO_DIR/man/${TOOL_NAME}.1" "$MAN_DIR/"
