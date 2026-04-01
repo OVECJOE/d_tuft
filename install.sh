@@ -132,6 +132,12 @@ fi
 
 # ================== MAN PAGE INSTALLATION =================
 MAN_DIR="/usr/local/share/man/man1"
+if [[ ! -d "$MAN_DIR" ]]; then
+  warn "Man directory ${MAN_DIR} does not exist. Creating it..."
+  if [[ -w "/usr/local/share/man" ]]; then
+    mkdir -p "$MAN_DIR"
+    success
+
 if [[ -w "$MAN_DIR" ]]; then
   sudo cp "$REPO_DIR/man/${TOOL_NAME}.1" "$MAN_DIR/"
   sudo chmod 644 "$MAN_DIR/${TOOL_NAME}.1"
