@@ -132,24 +132,44 @@ fi
 
 # ================== MAN PAGE INSTALLATION =================
 MAN_DIR="/usr/local/share/man/man1"
-if [[ ! -d "$MAN_DIR" ]]; then
-  warn "Man directory ${MAN_DIR} does not exist. Creating it..."
-  if [[ -w "/usr/local/share/man" ]]; then
-    mkdir -p "$MAN_DIR"
-    success "Created man directory at ${MAN_DIR}"
-  else 
-    die "Cannot create man directory at ${MAN_DIR}. Please create it manually and re-run the script to install the man page."
-  fi
-fi
-
-if [[ -w "$MAN_DIR" ]]; then
-  sudo cp "$REPO_DIR/man/${TOOL_NAME}.1" "$MAN_DIR/"
-  sudo chmod 644 "$MAN_DIR/${TOOL_NAME}.1"
-  mandb &>/dev/null || true
-  success "Man page installed to ${MAN_DIR}/${TOOL_NAME}.1"
+MAN_PAGE_SRC="$REPO_DIR/man/${TOOL_NAME}.1"
+if [[ ! -f "$MAN_PAGE_SRC" ]]; then
+  warn "Man page source $MAN_PAGE_SRC not found, skipping man page installation."
 else
-  warn "No write access to ${MAN_DIR}, skipping man page installation."
-  warn "You can manually copy ${REPO_DIR}/man/${TOOL_NAME}.1 to a directory in your MANPATH to enable 'man ${TOOL_NAME}'"
+  if [[ ! -d "$MAN_DIR" ]]; then
+    warn "Man directory ${MAN_DIR} does not exist. Creating it..."
+    if [[ -w "/usr/local/share/man" ]]; then
+      mkdir -p "$MAN_DIR"
+      success "Created man directory at ${MAN_DIR}"
+    else 
+      die "Cannot create man directory at ${MAN_DIR}. Please create it manually and re-run the script to install the man page."
+    fi
+  fi
+
+  if [[ -w "$MAN_DIR" ]]; then
+    cp_cmd="cp"
+    chmod_cmd="chmod"
+    # Use sudo if not writable by user
+    if [[ ! -w "$MAN_DIR" || ! -w "$MAN_DIR/" ]]; then
+      if command -v sudo &>/dev/null; then
+        cp_cmd="sudo cp"
+        chmod_cmd="sudo chmod"
+      else
+        warn "No write access to ${MAN_DIR} and sudo not available, skipping man page installation."
+        warn "You can manually copy ${MAN_PAGE_SRC} to a directory in your MANPATH to enable 'man ${TOOL_NAME}'"
+        MAN_PAGE_INSTALLED=false
+      fi
+    fi
+    if [[ "${MAN_PAGE_INSTALLED:-true}" == "true" ]]; then
+      $cp_cmd "$MAN_PAGE_SRC" "$MAN_DIR/"
+      $chmod_cmd 644 "$MAN_DIR/${TOOL_NAME}.1"
+      mandb &>/dev/null || true
+      success "Man page installed to ${MAN_DIR}/${TOOL_NAME}.1"
+    fi
+  else
+    warn "No write access to ${MAN_DIR}, skipping man page installation."
+    warn "You can manually copy ${MAN_PAGE_SRC} to a directory in your MANPATH to enable 'man ${TOOL_NAME}'"
+  fi
 fi
 
 success "${TOOL_NAME} installed successfully!"
