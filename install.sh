@@ -141,33 +141,27 @@ else
     if [[ -w "/usr/local/share/man" ]]; then
       mkdir -p "$MAN_DIR"
       success "Created man directory at ${MAN_DIR}"
-    else 
+    elif command -v sudo &>/dev/null; then
+      sudo mkdir -p "$MAN_DIR"
+      success "Created man directory at ${MAN_DIR} (with sudo)"
+    else
       die "Cannot create man directory at ${MAN_DIR}. Please create it manually and re-run the script to install the man page."
     fi
   fi
 
+  # Always use sudo if not writable
   if [[ -w "$MAN_DIR" ]]; then
-    cp_cmd="cp"
-    chmod_cmd="chmod"
-    # Use sudo if not writable by user
-    if [[ ! -w "$MAN_DIR" || ! -w "$MAN_DIR/" ]]; then
-      if command -v sudo &>/dev/null; then
-        cp_cmd="sudo cp"
-        chmod_cmd="sudo chmod"
-      else
-        warn "No write access to ${MAN_DIR} and sudo not available, skipping man page installation."
-        warn "You can manually copy ${MAN_PAGE_SRC} to a directory in your MANPATH to enable 'man ${TOOL_NAME}'"
-        MAN_PAGE_INSTALLED=false
-      fi
-    fi
-    if [[ "${MAN_PAGE_INSTALLED:-true}" == "true" ]]; then
-      $cp_cmd "$MAN_PAGE_SRC" "$MAN_DIR/"
-      $chmod_cmd 644 "$MAN_DIR/${TOOL_NAME}.1"
-      mandb &>/dev/null || true
-      success "Man page installed to ${MAN_DIR}/${TOOL_NAME}.1"
-    fi
+    cp "$MAN_PAGE_SRC" "$MAN_DIR/"
+    chmod 644 "$MAN_DIR/${TOOL_NAME}.1"
+    mandb &>/dev/null || true
+    success "Man page installed to ${MAN_DIR}/${TOOL_NAME}.1"
+  elif command -v sudo &>/dev/null; then
+    sudo cp "$MAN_PAGE_SRC" "$MAN_DIR/"
+    sudo chmod 644 "$MAN_DIR/${TOOL_NAME}.1"
+    sudo mandb &>/dev/null || true
+    success "Man page installed to ${MAN_DIR}/${TOOL_NAME}.1 (with sudo)"
   else
-    warn "No write access to ${MAN_DIR}, skipping man page installation."
+    warn "No write access to ${MAN_DIR} and sudo not available, skipping man page installation."
     warn "You can manually copy ${MAN_PAGE_SRC} to a directory in your MANPATH to enable 'man ${TOOL_NAME}'"
   fi
 fi
