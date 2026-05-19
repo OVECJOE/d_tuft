@@ -24,7 +24,7 @@ export function deriveSelector(entry: ABIEntry): string {
 export function immediateToNumber(immediate: Uint8Array): number {
     let value = 0;
     for (const byte of immediate) {
-        value = (value << 8) | byte;
+        value = value * 256 + byte;
     }
-    return value >>> 0;
+    return value;
 }

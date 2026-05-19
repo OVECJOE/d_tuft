@@ -2,28 +2,32 @@
 
 ## Overview
 
-d_tuft is a bidirectional EVM bytecode ↔ opcode transformer and analysis toolkit. It provides a CLI for disassembling, assembling, comparing, auditing, and testing Ethereum smart contract bytecode and opcodes.
+d_tuft is a bidirectional EVM bytecode ↔ opcode transformer, analysis toolkit, and lightweight execution engine. It provides a CLI for disassembling, assembling, comparing, auditing, and executing Ethereum smart contract bytecode.
 
 ### Features
-- Disassemble EVM bytecode to readable opcodes
-- Assemble opcodes back to bytecode
-- Compare bytecode or assembly files for equivalence
-- Round-trip testing for fidelity
-- Multiple output formats: text, annotated, JSON
-- Function identification with ABI name resolution
-- Gas analysis per-opcode, per-category, hotspot detection, per-function breakdown
-- Stack simulation depth tracking, underflow/overflow detection, per-instruction trace
-- Function-level diff between two contract deployments
+
+- **Disassemble** EVM bytecode to readable opcodes
+- **Assemble** opcodes back to bytecode
+- **Compare** bytecode or assembly files for equivalence
+- **Round-trip testing** for fidelity
+- **Multiple output formats**: text, annotated, JSON
+- **Function identification** with ABI name resolution
+- **Gas analysis** — per-opcode, per-category, hotspot detection, per-function breakdown
+- **Stack simulation** — depth tracking, underflow/overflow detection, per-instruction trace
+- **Function-level diff** — compare two contract deployments to detect added, removed, and modified functions
+- **Bytecode validation** — jumpdest verification, terminal checks, truncated PUSH detection
+- **Lightweight EVM** — execute bytecode with full opcode dispatch, memory/storage tracking, gas metering, and execution traces
 
 ## Installation
 
-> Assuming you cloned the repo and want to test it out
-
 ```bash
+# Clone and install
+git clone https://github.com/OVECJOE/d_tuft.git
+cd d_tuft
 bun install
 ```
 
-> Assuming you want to install as a Linux command
+### System-wide install
 
 ```bash
 wget -qO- https://raw.githubusercontent.com/OVECJOE/d_tuft/main/install.sh | bash
@@ -35,13 +39,11 @@ curl -fsSL https://raw.githubusercontent.com/OVECJOE/d_tuft/main/install.sh | ba
 
 ```bash
 bun run src/cli/index.ts <command> [options]
+# or after system install:
+d_tuft <command> [options]
 ```
 
-Run with no arguments to see a command overview:
-
-```bash
-bun run src/cli/index.ts
-```
+Run with no arguments to see a command overview.
 
 ## Commands
 
@@ -75,16 +77,12 @@ Compare two bytecode or assembly files for exact equivalence.
 d_tuft compare <file1> <file2> [--format auto|bytecode|assembly]
 ```
 
-Outputs a `MATCH` or `MISMATCH` summary box.
-
 ### `diff`
 Compare two contracts at function level to detect added, removed, and modified functions.
 
 ```bash
 d_tuft diff <first> <second> [--format text|annotated|json]
 ```
-
-Uses PC-bounded body comparison with jump-target normalisation to eliminate false positives from code relocation and shared internal helpers.
 
 ### `identify` (alias: `id`)
 Identify public functions, resolve names from ABI, and inspect contract structure.
@@ -98,11 +96,10 @@ d_tuft identify <input> [options]
 | `--format <format>` | `text` (default), `annotated`, `json` |
 | `--abi <file>` | ABI JSON file for function name resolution |
 | `-d, --diff <second>` | Compare functions between two inputs |
-| `-o, --output <file>` | Write output to file |
 | `--internal` | List internal/private JUMPDESTs |
 | `--gas` | Show gas cost estimates per function |
 
-### `gas` (alias: `g`) ✨ New
+### `gas` (alias: `g`)
 Analyse gas costs with per-opcode and per-category breakdowns, hotspot detection, and optional per-function estimates.
 
 ```bash
@@ -111,20 +108,11 @@ d_tuft gas <input> [options]
 
 | Option | Description |
 |--------|-------------|
-| `--functions` | Break down gas per identified function (sorted by cost) |
+| `--functions` | Break down gas per identified function |
 | `--top <n>` | Number of hotspots to show (default: 5) |
-| `--window <n>` | Hotspot sliding window size in instructions (default: 10) |
+| `--window <n>` | Hotspot sliding window size (default: 10) |
 
-Example output:
-```
-── Gas by Category ──────────────────────────────────────────
-  stack          ████████████████████  14044 (33.4%)
-  logging        ██████████████░░░░░░  10125 (24.1%)
-  control        ██████████░░░░░░░░░░   6875 (16.4%)
-  storage        █████████░░░░░░░░░░░   6100 (14.5%)
-```
-
-### `stack` (alias: `s`) ✨ New
+### `stack` (alias: `s`)
 Simulate EVM stack execution, visualise depth, and detect underflow/overflow.
 
 ```bash
@@ -136,17 +124,6 @@ d_tuft stack <input> [options]
 | `--trace` | Show per-instruction execution trace with depth bars |
 | `--limit <n>` | Max trace lines to display (default: 50) |
 
-The `--trace` flag shows each instruction's PC, opcode, operand, current stack depth, delta, and a visual depth bar:
-
-```
-── Execution Trace ──────────────────────────────────────────
-     PC Opcode         Operand              Depth  Delta Visual
-      0 PUSH1          0x80                     0     +1 │
-      2 PUSH1          0x40                     1     +1 ││
-      4 MSTORE                                  2     -2 ·
-      5 CALLVALUE                               0     +1 │
-```
-
 ### `test`
 Test round-trip bytecode → opcodes → bytecode fidelity.
 
@@ -154,7 +131,40 @@ Test round-trip bytecode → opcodes → bytecode fidelity.
 d_tuft test <input>
 ```
 
-Outputs a `PASS` or `FAIL` summary box.
+## Library API
+
+d_tuft can also be used as a library:
+
+```typescript
+import { core, evm, fi, utils } from 'd_tuft';
+
+// Disassemble
+const result = core.disassemble('0x6001600201');
+
+// Assemble
+const bytecode = core.assemble({ lines: [{ mnemonic: 'PUSH1', operand: '0x01' }], warnings: [] });
+
+// Execute with the lightweight EVM
+const vm = new evm.Evm('0x600160020100');
+const execResult = vm.run();
+console.log(execResult.trace); // per-instruction trace
+console.log(execResult.gasUsed); // total gas consumed
+
+// Identify functions
+const fi = new fi.FunctionIdentifier(bytecode);
+const functions = fi.identify();
+
+// Gas analysis
+const gc = new utils.GasCalculator();
+const report = gc.analyze(result.instructions);
+
+// Stack validation
+const sim = new utils.StackSimulator();
+const simResult = sim.simulate(result.instructions);
+
+// Bytecode validation
+const validation = core.validate(result);
+```
 
 ## Output Formats
 
@@ -164,17 +174,51 @@ Outputs a `PASS` or `FAIL` summary box.
 | `annotated` | Box-drawing table with gas costs and full details |
 | `json` | Machine-readable JSON for programmatic processing |
 
-## Project Info
+## Architecture
 
-A man page is available for detailed CLI documentation:
-
-```bash
-# View directly
-man ./d_tuft.1
-
-# Install system-wide (Unix/macOS)
-cp d_tuft.1 /usr/local/share/man/man1/d_tuft.1
-man d_tuft
+```
+┌─────────────────────────────────────────────────────┐
+│                      CLI Layer                       │
+│  disasm · asm · identify · diff · gas · stack · test │
+├─────────────────────────────────────────────────────┤
+│                   Analysis Libraries                  │
+│  ┌──────────────┐  ┌─────────────────────────────┐  │
+│  │ Function ID  │  │    Lightweight EVM Engine   │  │
+│  │  & Diffing   │  │  (memory, storage, context) │  │
+│  └──────────────┘  └─────────────────────────────┘  │
+├─────────────────────────────────────────────────────┤
+│                     Core Domain                       │
+│  Parser · Assembler · Opcodes · Validator · Types    │
+├─────────────────────────────────────────────────────┤
+│                     Utilities                         │
+│  Gas Calculator · Stack Simulator · Hex · Bytes      │
+└─────────────────────────────────────────────────────┘
 ```
 
-This project uses [Bun](https://bun.com) v1.3.8.
+## Development
+
+```bash
+# Run tests
+bun run test
+
+# Type check
+bun run typecheck
+
+# Lint
+bunx biome check .
+
+# Build standalone binary
+bun run build
+```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed development guidelines.
+
+## Man Page
+
+```bash
+man ./man/d_tuft.1
+```
+
+## License
+
+MIT
