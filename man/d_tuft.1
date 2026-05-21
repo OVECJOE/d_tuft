@@ -1,239 +1,229 @@
-.TH D_TUFT 1 "February 2026" "d_tuft 1.0" "EVM Bytecode Toolkit"
+.TH D_TUFT 1 "May 2026" "d_tuft 1.0.0" "User Commands"
 .SH NAME
-d_tuft \- bidirectional EVM bytecode ↔ opcode transformer and analysis toolkit
+d_tuft \- Bidirectional EVM bytecode ↔ opcode transformer, analysis toolkit, and decompiler
 .SH SYNOPSIS
 .B d_tuft
-[\-\-help] [\-\-version]
-.I <command>
-[\fIoptions\fR]
+[\fICOMMAND\fR] [\fIOPTIONS\fR]
 .SH DESCRIPTION
-d_tuft provides CLI tools for disassembling, assembling, comparing, and analyzing
-Ethereum Virtual Machine (EVM) bytecode. It supports round-trip testing, function
-identification, gas cost analysis, stack simulation, and function-level diffing between
-contract deployments.
+d_tuft is a comprehensive EVM bytecode toolkit providing disassembly, assembly, comparison, function identification, gas analysis, stack simulation, execution, and full decompilation of Ethereum smart contract bytecode.
 .SH COMMANDS
-.SS disasm (alias: d)
-Disassemble EVM bytecode to readable opcodes.
+.TP
+.B disasm, d
+Disassemble bytecode to readable opcodes.
+.IP
+\fBUsage:\fR d_tuft disasm <input> [options]
+.IP
+\fBOptions:\fR
 .RS
 .TP
-\fBUsage:\fR
-.B d_tuft disasm <input> [\fIoptions\fR]
+.B -o, --output <file>
+Write output to file (default: stdout)
 .TP
-\fBArguments:\fR
-.I <input>\: Input bytecode file path or hex string (e.g. 0x6060...)
+.B -f, --format <format>
+Output format: text (default), annotated, json
 .TP
-\fBOptions:\fR
+.B --no-pc
+Omit program counter from output
 .TP
-\fB\-o, \-\-output <file>\fR
-Write output to file (defaults to stdout).
+.B --gas
+Include gas cost per instruction
 .TP
-\fB\-f, \-\-format <format>\fR
-Output format: \fBtext\fR (default), \fBannotated\fR, \fBjson\fR.
+.B --hex
+Include raw hex bytes per instruction
 .TP
-\fB\-\-no\-pc\fR
-Omit program counter from output.
-.TP
-\fB\-\-gas\fR
-Include gas cost per instruction.
-.TP
-\fB\-\-hex\fR
-Include raw hex bytes per instruction.
-.TP
-\fB\-\-stack\fR
-Run stack depth validation after disassembly. Reports max depth, final depth,
-and any underflow or overflow errors detected.
+.B --stack
+Run stack depth validation after disassembly
 .RE
-.SS asm (alias: a)
+.TP
+.B asm, a
 Assemble opcodes to bytecode.
-.RS
+.IP
+\fBUsage:\fR d_tuft asm <input.evm> [-o output.bin]
 .TP
-\fBUsage:\fR
-.B d_tuft asm <input> [\fIoptions\fR]
+.B compare, c
+Compare two bytecode or assembly files for equivalence.
+.IP
+\fBUsage:\fR d_tuft compare <file1> <file2> [--format auto|bytecode|assembly]
 .TP
-\fBArguments:\fR
-.I <input>\: Input assembly file (.evm)
+.B diff
+Compare two contracts at function level to detect changes.
+.IP
+\fBUsage:\fR d_tuft diff <first> <second> [--format text|annotated|json]
 .TP
+.B identify, id
+Identify public functions, resolve names from ABI, inspect contract structure.
+.IP
+\fBUsage:\fR d_tuft identify <input> [options]
+.IP
 \fBOptions:\fR
-.TP
-\fB\-o, \-\-output <file>\fR
-Output file (default: stdout). Status messages always go to stderr.
-.RE
-.SS compare (alias: c)
-Compare two bytecode or assembly files for exact equivalence.
 .RS
 .TP
-\fBUsage:\fR
-.B d_tuft compare <file1> <file2> [\fIoptions\fR]
+.B --format <format>
+Output format: text (default), annotated, json
 .TP
-\fBArguments:\fR
-.I <file1>\: First input file (bytecode or assembly)
-.I <file2>\: Second input file (bytecode or assembly)
+.B --abi <file>
+ABI JSON file for function name resolution
 .TP
+.B -d, --diff <second_input>
+Compare functions between two inputs
+.TP
+.B -o, --output [dir]
+Save each function to its own file
+.TP
+.B --internal
+List internal/private JUMPDESTs
+.TP
+.B --gas
+Show gas cost estimates per function
+.RE
+.TP
+.B gas, g
+Analyse gas costs with per-opcode and per-category breakdowns.
+.IP
+\fBUsage:\fR d_tuft gas <input> [options]
+.IP
 \fBOptions:\fR
-.TP
-\fB\-\-format <format>\fR
-Input format: \fBauto\fR (default), \fBbytecode\fR, \fBassembly\fR.
-Outputs a MATCH or MISMATCH summary box.
-.RE
-.SS diff
-Compare two contracts at function level to detect added, removed, and modified functions.
 .RS
 .TP
-\fBUsage:\fR
-.B d_tuft diff <first> <second> [\fIoptions\fR]
+.B --functions
+Break down gas per identified function
 .TP
-\fBArguments:\fR
-.I <first>\: First input (bytecode file or hex string)
-.I <second>\: Second input (bytecode file or hex string)
+.B --top <n>
+Number of hotspots to show (default: 5)
 .TP
+.B --window <n>
+Hotspot sliding window size (default: 10)
+.RE
+.TP
+.B stack, s
+Simulate EVM stack execution, visualise depth, detect underflow/overflow.
+.IP
+\fBUsage:\fR d_tuft stack <input> [options]
+.IP
 \fBOptions:\fR
-.TP
-\fB\-\-format <format>\fR
-Output format: \fBtext\fR (default), \fBannotated\fR, \fBjson\fR.
-.PP
-Uses PC-bounded body comparison with jump-target normalisation to eliminate false
-positives caused by code relocation and shared internal helper functions.
-.RE
-.SS identify (alias: id)
-Identify public functions in bytecode, resolve names from an ABI, and inspect
-contract structure.
 .RS
 .TP
-\fBUsage:\fR
-.B d_tuft identify <input> [\fIoptions\fR]
+.B --trace
+Show per-instruction execution trace with depth bars
 .TP
-\fBArguments:\fR
-.I <input>\: Input bytecode (hex string or file) or assembly file
+.B --limit <n>
+Max trace lines to display (default: 50)
+.RE
 .TP
+.B test
+Test round-trip bytecode → opcodes → bytecode fidelity.
+.IP
+\fBUsage:\fR d_tuft test <input>
+.TP
+.B decompile, dec
+Decompile bytecode to Solidity-like pseudocode with automatic function inference, storage analysis, and pattern matching. Works on unverified contracts without an ABI. Output is syntax-highlighted and streamed character-by-character for an AI-like experience.
+.IP
+\fBUsage:\fR d_tuft decompile <input> [options]
+.IP
 \fBOptions:\fR
-.TP
-\fB\-\-format <format>\fR
-Output format: \fBtext\fR (default), \fBannotated\fR, \fBjson\fR.
-.TP
-\fB\-\-abi <file>\fR
-ABI JSON file for resolving function names from selectors.
-.TP
-\fB\-o, \-\-output <file>\fR
-Write output to file (defaults to stdout).
-.TP
-\fB\-\-internal\fR
-Also list internal/private functions (orphan JUMPDESTs not reachable from dispatcher).
-.TP
-\fB\-\-gas\fR
-Show gas cost estimates per function, sorted by total gas descending.
-.RE
-.SS gas (alias: g)
-Analyse static gas costs across an instruction sequence.
 .RS
 .TP
-\fBUsage:\fR
-.B d_tuft gas <input> [\fIoptions\fR]
+.B -o, --output <file>
+Write decompiled output to file
 .TP
-\fBArguments:\fR
-.I <input>\: Input bytecode file or hex string
+.B --format <format>
+Output format: solidity (default), pseudocode
 .TP
-\fBOptions:\fR
+.B --no-storage
+Hide inferred storage variables
 .TP
-\fB\-\-functions\fR
-Break down gas per identified public function, sorted by total gas descending.
+.B --no-comments
+Hide decompiler comments and confidence scores
 .TP
-\fB\-\-top <n>\fR
-Number of hotspot windows to display (default: 5).
+.B --no-stream
+Print output instantly instead of streaming (useful for piping)
 .TP
-\fB\-\-window <n>\fR
-Sliding window size in instructions for hotspot detection (default: 10).
-.PP
-Gas costs are base costs from the Yellow Paper. Dynamic costs (memory expansion,
-call stipends, SSTORE dirty/clean state) require runtime state and are not modelled.
-KECCAK256 and EXP report base cost only; LOG* uses 375 + 375*topics.
+.B --rpc <url>
+RPC endpoint to fetch bytecode from (default: public Ethereum RPC)
 .RE
-.SS stack (alias: s)
-Simulate EVM stack execution to track depth and detect underflow/overflow.
+.IP
+\fBExamples:\fR
 .RS
 .TP
-\fBUsage:\fR
-.B d_tuft stack <input> [\fIoptions\fR]
+Decompile from a local bytecode file:
+d_tuft decompile contract.bin -o output.sol
 .TP
-\fBArguments:\fR
-.I <input>\: Input bytecode file or hex string
+Decompile a deployed contract by address:
+d_tuft decompile 0x1234...abcd
 .TP
-\fBOptions:\fR
+Decompile from hex string:
+d_tuft decompile 0x6080604052...
 .TP
-\fB\-\-trace\fR
-Print a per-instruction execution trace showing PC, opcode, operand, current depth,
-delta, and a visual depth bar (e.g. \fB│││\fR).
-.TP
-\fB\-\-limit <n>\fR
-Maximum number of trace lines to display (default: 50).
-.PP
-Performs a linear pass. Does not follow control flow branches \(em for full CFG
-traversal use \fBidentify\fR. The EVM stack maximum of 1024 items is enforced.
+Decompile using a custom RPC endpoint:
+d_tuft decompile 0x1234...abcd --rpc https://mainnet.infura.io/v3/YOUR_KEY
 .RE
-.SS test
-Test round-trip fidelity: bytecode -> opcodes -> bytecode.
-.RS
-.TP
-\fBUsage:\fR
-.B d_tuft test <input>
-.TP
-\fBArguments:\fR
-.I <input>\: Input bytecode (hex string or file)
-.PP
-Outputs a PASS or FAIL summary box. Bytes that correspond to unrecognised opcodes
-are decoded as INVALID (0xfe) and will cause a FAIL on re-assembly.
-.RE
-.SH EXAMPLES
-.SS Disassemble with stack validation
-.nf
-$ d_tuft disasm contract.bin --stack
-.fi
-.SS Full gas report with function breakdown
-.nf
-$ d_tuft gas contract.bin --functions --top 10
-.fi
-.SS Stack trace (first 30 instructions)
-.nf
-$ d_tuft stack contract.bin --trace --limit 30
-.fi
-.SS Identify functions with ABI and gas
-.nf
-$ d_tuft identify contract.bin --abi contract.abi.json --gas
-.fi
-.SS Compare two contract versions
-.nf
-$ d_tuft diff v1.bin v2.bin --format text
-.fi
-.SS Disassemble and write to file
-.nf
-$ d_tuft disasm examples/contract.bin -o contract.evm
-.fi
+.SH INPUT FORMATS
+All commands accepting bytecode support:
+.IP \[bu] 2
+Hex strings with 0x prefix (e.g., 0x6060...)
+.IP \[bu] 2
+Files containing hex bytecode
+.IP \[bu] 2
+Ethereum contract addresses (0x + 40 hex chars) for decompile command
+.IP \[bu] 2
+Assembly files (.evm) for the asm command
 .SH OUTPUT FORMATS
 .TP
-\fBtext\fR
-Human-readable format with optional PC, gas, and hex byte annotations.
+.B text
+Human-readable with optional PC, gas, hex annotations
 .TP
-\fBannotated\fR
-Detailed box-drawing table with gas costs and full instruction details.
+.B annotated
+Box-drawing table with gas costs and full details
 .TP
-\fBjson\fR
-Machine-readable JSON output for programmatic processing.
+.B json
+Machine-readable JSON for programmatic processing
+.TP
+.B solidity
+Decompiled Solidity-like code (decompile command only)
 .SH EXIT STATUS
 .TP
-0
-Success.
+.B 0
+Success
 .TP
-1
-Error (invalid input, format mismatch, stack violation, or operation failure).
-.SH NOTES
-Gas analysis models static base costs only. Actual on-chain gas consumption
-depends on runtime state (storage slot warmth, memory expansion, call depth, etc.)
-and will differ from the estimates produced by the \fBgas\fR command.
+.B 1
+Error (invalid input, mismatch, or failure)
+.SH EXAMPLES
+.TP
+Disassemble with full annotations:
+d_tuft disasm contract.bin --format annotated --stack --gas
+.TP
+Compare two contract versions:
+d_tuft diff v1.bin v2.bin --format annotated
+.TP
+Find gas hotspots:
+d_tuft gas contract.bin --functions --top 10
+.TP
+Decompile an unverified contract:
+d_tuft decompile 0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984 -o uniswap.sol
+.SH LIBRARY API
+d_tuft can be imported as a TypeScript library:
+.IP
+.nf
+import { core, evm, fi, decompiler } from 'd_tuft';
 
-Stack simulation performs a linear-pass analysis and does not follow conditional
-branches. A clean simulation result does not guarantee the absence of stack errors
-on all execution paths.
-.SH SEE ALSO
-.BR evm (1),
-.BR solc (1)
+// Disassemble
+const result = core.disassemble('0x6001600201');
+
+// Execute
+const vm = new evm.Evm('0x600160020100');
+const execResult = vm.run();
+
+// Identify functions
+const fi = new fi.FunctionIdentifier(bytecode);
+const functions = fi.identify();
+
+// Decompile
+const decompiled = decompiler.decompile(bytecode);
+console.log(decompiled.solidity);
+.fi
+.SH BUGS
+Report bugs at https://github.com/OVECJOE/d_tuft/issues
 .SH AUTHOR
-d_tuft was built with bun v1.3.8.
+OVECJOE
+.SH LICENSE
+MIT

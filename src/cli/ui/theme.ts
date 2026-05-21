@@ -13,6 +13,7 @@
  *  T.op       — opcode semantic categories
  *  T.diff     — diff / compare coloring (added / removed / same)
  *  T.badge    — colored badges / labels
+ *  T.code     — syntax highlighting for Solidity / code output
  */
 import chalk from 'chalk';
 
@@ -107,6 +108,23 @@ export const T = {
         warn: chalk.bgYellow.black.bold,
         info: chalk.bgBlue.white.bold,
         neutral: chalk.bgGray.white,
+    },
+
+    // ── Syntax highlighting (Solidity / code) ─────────────────────────────────
+    code: {
+        keyword: chalk.magentaBright,        // function, contract, return, if, else, etc.
+        type: chalk.cyanBright,              // uint256, address, bool, bytes, mapping
+        builtin: chalk.yellowBright,         // require, revert, emit, msg, block, tx
+        number: chalk.greenBright,           // numeric literals
+        string: chalk.green,                 // string literals
+        comment: chalk.dim.gray,             // // and /* */ comments
+        operator: chalk.white,               // =, +, -, *, /, etc.
+        punctuation: chalk.dim,              // (, ), {, }, ;, ,
+        identifier: chalk.white,             // variable / function names
+        selector: chalk.cyan,                // 0x... function selectors
+        decorator: chalk.yellow,             // @override, @external, etc.
+        visibility: chalk.blueBright,        // public, private, external, internal
+        mutability: chalk.blue,              // view, pure, payable
     },
 } as const;
 

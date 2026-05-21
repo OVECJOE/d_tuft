@@ -68,6 +68,18 @@ export class Panel {
         const rp = innerFill - lp;
         lines.push(B('╔' + '═'.repeat(lp)) + H(titleVis) + B('═'.repeat(rp) + '╗'));
 
+        // ── Calculate dynamic key width from longest key ──────────────────────
+        const MIN_KEY_W = 12;
+        const MAX_KEY_W = Math.floor(inner * 0.55); // never more than 55% of inner
+        let maxKeyLen = MIN_KEY_W;
+        for (const item of this._items) {
+            if (item.kind === 'stat') {
+                maxKeyLen = Math.max(maxKeyLen, item.key.length);
+            }
+        }
+        const KEY_W = Math.min(maxKeyLen, MAX_KEY_W);
+        const VAL_W = inner - KEY_W - 2; // -2 for leading space + trailing space
+
         // ── Items ─────────────────────────────────────────────────────────────
         for (const item of this._items) {
             if (item.kind === 'sep') {
@@ -82,10 +94,7 @@ export class Panel {
                 continue;
             }
 
-            // Stat row:  ║ key    value                     ║
-            // key column = 16 chars, value fills the rest
-            const KEY_W = 16;
-            const VAL_W = inner - KEY_W - 2; // -2 for leading space + trailing space
+            // Stat row:  ║ key          value                ║
             const keyStr = T.text.key(item.key.padEnd(KEY_W));
             const rawVal = item.value;
             const coloredVal = (item.color ?? T.val.number)(rawVal);

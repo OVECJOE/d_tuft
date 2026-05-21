@@ -2,7 +2,7 @@
 
 ## Overview
 
-d_tuft is a bidirectional EVM bytecode ↔ opcode transformer, analysis toolkit, and lightweight execution engine. It provides a CLI for disassembling, assembling, comparing, auditing, and executing Ethereum smart contract bytecode.
+d_tuft is a bidirectional EVM bytecode ↔ opcode transformer, analysis toolkit, lightweight execution engine, and **one-click decompiler**. It provides a CLI for disassembling, assembling, comparing, auditing, executing, and decompiling Ethereum smart contract bytecode — including unverified contracts without an ABI.
 
 ### Features
 
@@ -17,6 +17,7 @@ d_tuft is a bidirectional EVM bytecode ↔ opcode transformer, analysis toolkit,
 - **Function-level diff** — compare two contract deployments to detect added, removed, and modified functions
 - **Bytecode validation** — jumpdest verification, terminal checks, truncated PUSH detection
 - **Lightweight EVM** — execute bytecode with full opcode dispatch, memory/storage tracking, gas metering, and execution traces
+- **One-click decompilation** — decompile unverified contracts to Solidity-like code with automatic function inference, storage analysis, and known pattern matching (ERC20, ERC721, Ownable, Uniswap, etc.)
 
 ## Installation
 
@@ -131,12 +132,39 @@ Test round-trip bytecode → opcodes → bytecode fidelity.
 d_tuft test <input>
 ```
 
+### `decompile` (alias: `dec`) ✨
+Decompile bytecode to Solidity-like pseudocode with automatic function inference, storage analysis, and known pattern matching. Works on unverified contracts without an ABI.
+
+```bash
+d_tuft decompile <input> [options]
+```
+
+| Option | Description |
+|--------|-------------|
+| `-o, --output <file>` | Write decompiled output to file |
+| `--format <format>` | `solidity` (default), `pseudocode` |
+| `--no-storage` | Hide inferred storage variables |
+| `--no-comments` | Hide decompiler comments |
+| `--rpc <url>` | RPC endpoint to fetch bytecode from |
+
+**Examples:**
+```bash
+# Decompile from a local file
+d_tuft decompile contract.bin -o output.sol
+
+# Decompile a deployed contract by address (fetches from chain)
+d_tuft decompile 0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984
+
+# Decompile from hex string
+d_tuft decompile 0x6080604052...
+```
+
 ## Library API
 
 d_tuft can also be used as a library:
 
 ```typescript
-import { core, evm, fi, utils } from 'd_tuft';
+import { core, evm, fi, decompiler, utils } from 'd_tuft';
 
 // Disassemble
 const result = core.disassemble('0x6001600201');
@@ -153,6 +181,12 @@ console.log(execResult.gasUsed); // total gas consumed
 // Identify functions
 const fi = new fi.FunctionIdentifier(bytecode);
 const functions = fi.identify();
+
+// Decompile an unverified contract (no ABI needed)
+const decompiled = decompiler.decompile(bytecode);
+console.log(decompiled.solidity); // Solidity-like output
+console.log(decompiled.matchedPatterns); // ERC20, Ownable, etc.
+console.log(decompiled.functions); // inferred function signatures
 
 // Gas analysis
 const gc = new utils.GasCalculator();
@@ -177,22 +211,24 @@ const validation = core.validate(result);
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                      CLI Layer                       │
-│  disasm · asm · identify · diff · gas · stack · test │
-├─────────────────────────────────────────────────────┤
-│                   Analysis Libraries                  │
-│  ┌──────────────┐  ┌─────────────────────────────┐  │
-│  │ Function ID  │  │    Lightweight EVM Engine   │  │
-│  │  & Diffing   │  │  (memory, storage, context) │  │
-│  └──────────────┘  └─────────────────────────────┘  │
-├─────────────────────────────────────────────────────┤
-│                     Core Domain                       │
-│  Parser · Assembler · Opcodes · Validator · Types    │
-├─────────────────────────────────────────────────────┤
-│                     Utilities                         │
-│  Gas Calculator · Stack Simulator · Hex · Bytes      │
-└─────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│                         CLI Layer                             │
+│  disasm · asm · identify · diff · gas · stack · test · dec   │
+├──────────────────────────────────────────────────────────────┤
+│                      Analysis Libraries                        │
+│  ┌──────────────┐  ┌──────────────┐  ┌────────────────────┐  │
+│  │ Function ID  │  │ Decompiler   │  │  Lightweight EVM   │  │
+│  │  & Diffing   │  │ (CFG, ABI,   │  │  Engine (memory,   │  │
+│  │              │  │  Storage,    │  │  storage, context) │  │
+│  │              │  │  Patterns)   │  │                    │  │
+│  └──────────────┘  └──────────────┘  └────────────────────┘  │
+├──────────────────────────────────────────────────────────────┤
+│                        Core Domain                             │
+│  Parser · Assembler · Opcodes · Validator · Types             │
+├──────────────────────────────────────────────────────────────┤
+│                        Utilities                               │
+│  Gas Calculator · Stack Simulator · Hex · Bytes               │
+└──────────────────────────────────────────────────────────────┘
 ```
 
 ## Development
