@@ -1,25 +1,18 @@
-import { assemble } from "../../core/assembler";
-import { disassemble } from "../../core/parser";
-import { OP, TERMINAL_OPCODES } from "./constants";
-import type {
-    FunctionMap,
-    AssemblyProgram,
-    ABI,
-    SelectorDiff,
-    DispatcherEntry,
-    Instruction
-} from "../../core/types";
-import { buildSignature, deriveSelector, immediateToNumber } from "./helpers";
-import { bytesToHex } from "../../utils";
+import { assemble } from '../../core/assembler';
+import { disassemble } from '../../core/parser';
+import type { ABI, AssemblyProgram, DispatcherEntry, FunctionMap, Instruction, SelectorDiff } from '../../core/types';
+import { bytesToHex } from '../../utils';
+import { OP, TERMINAL_OPCODES } from './constants';
+import { buildSignature, deriveSelector, immediateToNumber } from './helpers';
 
 /**
  * Identifies, maps, and names EVM functions from dissembled bytecode.
- * 
+ *
  * Usage:
  *   const fi = new FunctionIdentifier(rawBytecode);
  *   const maps = fi.identify();
  *   fi.resolveNames(abi); // optional - enriches maps with human names
- * 
+ *
  * Works on both raw bytecode (Uint8Array) and pre-parsed AssemblyProgram.
  * Internally everything is normalized to Instruction[] at construction time
  * so all methods operate on a single consistent representation.
@@ -47,7 +40,7 @@ export class FunctionIdentifier {
     /**
      * Scan the bytecode, locate the dispatcher, and return one FunctionMap
      * per public/external function found.
-     * 
+     *
      * Safe to call multiple times - subsequent calls return the cached result
      * unless the instance was reconstructed.
      */
@@ -82,10 +75,10 @@ export class FunctionIdentifier {
     /**
      * Enrich identified functions with human-readable names derived from the contract ABI.
      * Only function-type entries are processed; events/errors are ignored.
-     * 
+     *
      * Must be called after identify() - if identify() hasn't run yet, this method runs
      * it automatically.
-     * 
+     *
      * Returns the updated FunctionMap array so callers can chain:
      *   const maps = fi.identify();
      *   fi.resolveNames(abi);
@@ -98,7 +91,7 @@ export class FunctionIdentifier {
         }
 
         for (const entry of abi) {
-            if (entry.type !== "function" || !entry.name) continue;
+            if (entry.type !== 'function' || !entry.name) continue;
 
             const selector = deriveSelector(entry).toLowerCase();
             const existing = this.functionMaps.get(selector);
@@ -118,12 +111,12 @@ export class FunctionIdentifier {
     /**
      * Return the instruction body for a given selector.
      * Selector may be provided with or without "0x" prefix.
-     * 
+     *
      * Returns null if the selector was not found - prefer null over throwing
      * so callers can distinguish "not found" from genuine errors.
      */
     getBody(selector: string): Instruction[] | null {
-        const key = selector.replace(/0x/i, "").toLowerCase();
+        const key = selector.replace(/0x/i, '').toLowerCase();
         return this.functionMaps.get(key)?.body || null;
     }
 
@@ -132,7 +125,7 @@ export class FunctionIdentifier {
      * Useful when callers want full metadata rather than just the body.
      */
     getFunction(selector: string): FunctionMap | null {
-        const key = selector.replace(/0x/i, "").toLowerCase();
+        const key = selector.replace(/0x/i, '').toLowerCase();
         return this.functionMaps.get(key) || null;
     }
 
@@ -143,14 +136,10 @@ export class FunctionIdentifier {
      * shared logic paths that multiple public functions flow through.
      */
     findInternalFunctions(): Instruction[] {
-        const dispatcherDestinations = new Set(
-            this.findDispatcher().map((e) => e.jumpDestOffset)
-        );
+        const dispatcherDestinations = new Set(this.findDispatcher().map((e) => e.jumpDestOffset));
 
         return this.instructions.filter(
-            (instr) =>
-                instr.opcode.value === OP.JUMPDEST
-                && !dispatcherDestinations.has(instr.pc)
+            (instr) => instr.opcode.value === OP.JUMPDEST && !dispatcherDestinations.has(instr.pc),
         );
     }
 
@@ -158,7 +147,7 @@ export class FunctionIdentifier {
      * Compare this contract's function maps against another instance.
      * Returns selectors present in both with differing bodies - indicating
      * a function changed between two deployments. Useful for upgrade auditing.
-     * 
+     *
      * The comparison is opcode-level: same sequence of opcode values and immediate
      * bytes = identical. PC differences alone do not count as a diff
      * (the function may have shifted position without changing logic).
@@ -178,20 +167,18 @@ export class FunctionIdentifier {
                 diffs.push({
                     selector: ours.selector,
                     name: ours.name,
-                    kind: "removed",
+                    kind: 'removed',
                 });
                 continue;
             }
 
-            const ourLocal = FunctionIdentifier.normalizeBody(
-                FunctionIdentifier.extractLocalBody(ours, ourStarts)
-            );
+            const ourLocal = FunctionIdentifier.normalizeBody(FunctionIdentifier.extractLocalBody(ours, ourStarts));
             const theirLocal = FunctionIdentifier.normalizeBody(
-                FunctionIdentifier.extractLocalBody(theirs, theirStarts)
+                FunctionIdentifier.extractLocalBody(theirs, theirStarts),
             );
 
             if (!FunctionIdentifier.bodiesEqual(ourLocal, theirLocal)) {
-                diffs.push({ selector: ours.selector, name: ours.name, kind: "modified" });
+                diffs.push({ selector: ours.selector, name: ours.name, kind: 'modified' });
             }
         }
 
@@ -201,7 +188,7 @@ export class FunctionIdentifier {
                 diffs.push({
                     selector: theirs.selector,
                     name: theirs.name,
-                    kind: "added",
+                    kind: 'added',
                 });
             }
         }
@@ -210,9 +197,9 @@ export class FunctionIdentifier {
     }
 
     /**
-       * Scan instructions from the top for the PUSH4+EQ+JUMPI pattern that
-       * forms the function dispatcher.
-       */
+     * Scan instructions from the top for the PUSH4+EQ+JUMPI pattern that
+     * forms the function dispatcher.
+     */
     private findDispatcher(): DispatcherEntry[] {
         const entries: DispatcherEntry[] = [];
         const len = this.instructions.length;
@@ -221,16 +208,12 @@ export class FunctionIdentifier {
         for (let i = 0; i < len; i++) {
             const instr = this.instructions[i];
 
-            if (
-                instr?.opcode.value === OP.JUMPDEST &&
-                functionStarts.has(instr.pc) &&
-                entries.length > 0
-            ) break;
+            if (instr?.opcode.value === OP.JUMPDEST && functionStarts.has(instr.pc) && entries.length > 0) break;
 
             if (instr?.opcode.value !== OP.PUSH4 || !instr.immediate) continue;
 
             const raw = bytesToHex(instr.immediate);
-            const selector = raw.replace(/^0x/i, "").toLowerCase();
+            const selector = raw.replace(/^0x/i, '').toLowerCase();
             const selectorPC = instr.pc;
 
             let eqFound = false;
@@ -243,12 +226,7 @@ export class FunctionIdentifier {
                     eqFound = true;
                     continue;
                 }
-                if (
-                    eqFound &&
-                    w.opcode.value >= OP.PUSH1 &&
-                    w.opcode.value <= OP.PUSH2 &&
-                    w.immediate
-                ) {
+                if (eqFound && w.opcode.value >= OP.PUSH1 && w.opcode.value <= OP.PUSH2 && w.immediate) {
                     destOffset = immediateToNumber(w.immediate);
                     continue;
                 }
@@ -268,9 +246,9 @@ export class FunctionIdentifier {
      * Walk forward from a JUMPDEST at startOffset until we hit a terminal opcode
      * (RETURN, REVERT, STOP, INVALID, SELFDESTRUCT) or an unconditional JUMP
      * back out of the function body.
-     * 
+     *
      * Returns the PC of the terminal instruction (inclusive end of body).
-     * 
+     *
      * Handles nested control flow (loops, if/else) by tracking a depth counter for conditional jumps:
      * we only consider the function ended when we reach a terminal at depth 0.
      */
@@ -383,8 +361,8 @@ export class FunctionIdentifier {
     }
 
     /**
-   * Slice instructions between startOffset and endOffset (inclusive).
-   */
+     * Slice instructions between startOffset and endOffset (inclusive).
+     */
     private sliceBody(startOffset: number, endOffset: number): Instruction[] {
         const startIdx = this.pcIndex.get(startOffset);
         if (startIdx === undefined) return [];
@@ -448,13 +426,9 @@ export class FunctionIdentifier {
     private static extractLocalBody(map: FunctionMap, allStarts: Set<number>): Instruction[] {
         const sorted = Array.from(allStarts).sort((a, b) => a - b);
         const idx = sorted.indexOf(map.startOffset);
-        const nextStart = idx >= 0 && idx + 1 < sorted.length
-            ? sorted[idx + 1] as number
-            : Infinity;
+        const nextStart = idx >= 0 && idx + 1 < sorted.length ? (sorted[idx + 1] as number) : Infinity;
 
-        return map.body.filter(
-            (instr) => instr.pc >= map.startOffset && instr.pc < nextStart
-        );
+        return map.body.filter((instr) => instr.pc >= map.startOffset && instr.pc < nextStart);
     }
 
     /**

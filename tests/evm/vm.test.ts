@@ -1,7 +1,7 @@
-import { describe, test, expect } from 'vitest';
-import { Evm } from '../../src/libraries/evm/vm';
+import { describe, expect, test } from 'vitest';
 import { EvmMemory } from '../../src/libraries/evm/memory';
 import { EvmStorage } from '../../src/libraries/evm/storage';
+import { Evm } from '../../src/libraries/evm/vm';
 
 describe('EvmMemory', () => {
     test('starts empty with zero active size', () => {

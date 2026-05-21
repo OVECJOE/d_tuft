@@ -1,11 +1,10 @@
-import type { Command } from 'commander';
 import { readFileSync } from 'node:fs';
-import { tryCatch, sectionHeader, sectionFooter, success, error, kv, box } from "../utils";
-import { T, Panel } from '~~/cli/ui';
-import type { AssemblyLine } from "~~/core/types";
-import { bytesToHex, hexToBytes } from "~~/utils";
-import { disassemble } from "~~/core";
-import { assemble } from "~~/core";
+import type { Command } from 'commander';
+import { Panel, T } from '~~/cli/ui';
+import { assemble, disassemble } from '~~/core';
+import type { AssemblyLine } from '~~/core/types';
+import { bytesToHex, hexToBytes } from '~~/utils';
+import { box, error, kv, sectionFooter, sectionHeader, success, tryCatch } from '../utils';
 
 export default function roundtrip(program: Command) {
     program
@@ -14,8 +13,8 @@ export default function roundtrip(program: Command) {
         .argument('<input>', 'Bytecode file or hex string')
         .action(async (input) => {
             await tryCatch(async () => {
-                console.log(sectionHeader("Round-Trip Test"));
-                console.log(kv("Input:", T.val.filename(input)));
+                console.log(sectionHeader('Round-Trip Test'));
+                console.log(kv('Input:', T.val.filename(input)));
                 console.log(sectionFooter());
 
                 let originalBytecode: Uint8Array;
@@ -24,27 +23,31 @@ export default function roundtrip(program: Command) {
                 } else {
                     originalBytecode = hexToBytes(readFileSync(input, 'utf-8').trim());
                 }
-                console.log(kv("Input size:", `${T.val.number(String(originalBytecode.length))} bytes`));
+                console.log(kv('Input size:', `${T.val.number(String(originalBytecode.length))} bytes`));
                 console.log('');
 
                 console.log(T.text.muted('  Step 1  Disassembling…'));
                 const disassembled = disassemble(originalBytecode);
-                console.log(success(
-                    `${T.val.number(String(originalBytecode.length))} bytes → ` +
-                    `${T.val.number(String(disassembled.instructions.length))} instructions`
-                ));
+                console.log(
+                    success(
+                        `${T.val.number(String(originalBytecode.length))} bytes → ` +
+                            `${T.val.number(String(disassembled.instructions.length))} instructions`,
+                    ),
+                );
 
-                const assemblyLines: AssemblyLine[] = disassembled.instructions.map(inst => ({
+                const assemblyLines: AssemblyLine[] = disassembled.instructions.map((inst) => ({
                     mnemonic: inst.opcode.mnemonic,
-                    ...(inst.immediate && { operand: bytesToHex(inst.immediate) })
+                    ...(inst.immediate && { operand: bytesToHex(inst.immediate) }),
                 }));
 
                 console.log(T.text.muted('  Step 2  Reassembling…'));
                 const reassembledBytecode = assemble({ lines: assemblyLines, warnings: [] }) as Uint8Array;
-                console.log(success(
-                    `${T.val.number(String(assemblyLines.length))} instructions → ` +
-                    `${T.val.number(String(reassembledBytecode.length))} bytes`
-                ));
+                console.log(
+                    success(
+                        `${T.val.number(String(assemblyLines.length))} instructions → ` +
+                            `${T.val.number(String(reassembledBytecode.length))} bytes`,
+                    ),
+                );
 
                 console.log(T.text.muted('  Step 3  Comparing…'));
 
@@ -60,9 +63,13 @@ export default function roundtrip(program: Command) {
                         if (differences <= 5) {
                             console.log(
                                 `    ${T.text.muted(`byte ${i}:`)} ` +
-                                T.diff.removed(`0x${(originalBytecode[i] as number).toString(16).padStart(2, '0')}`) +
-                                T.text.muted(' → ') +
-                                T.diff.added(`0x${(reassembledBytecode[i] as number).toString(16).padStart(2, '0')}`)
+                                    T.diff.removed(
+                                        `0x${(originalBytecode[i] as number).toString(16).padStart(2, '0')}`,
+                                    ) +
+                                    T.text.muted(' → ') +
+                                    T.diff.added(
+                                        `0x${(reassembledBytecode[i] as number).toString(16).padStart(2, '0')}`,
+                                    ),
                             );
                         }
                     }
@@ -75,30 +82,32 @@ export default function roundtrip(program: Command) {
                 console.log(sectionFooter());
                 console.log('');
 
-                console.log(Panel.create('Round-Trip Summary')
-                    .stat('Input', input, T.val.filename)
-                    .separator()
-                    .stat('Original size', `${originalBytecode.length} bytes`, T.val.number)
-                    .stat('Reassembled size', `${reassembledBytecode.length} bytes`, T.val.number)
-                    .stat(
-                        'Byte differences',
-                        String(differences),
-                        differences === 0 ? T.status.success : T.status.error,
-                    )
-                    .render()
+                console.log(
+                    Panel.create('Round-Trip Summary')
+                        .stat('Input', input, T.val.filename)
+                        .separator()
+                        .stat('Original size', `${originalBytecode.length} bytes`, T.val.number)
+                        .stat('Reassembled size', `${reassembledBytecode.length} bytes`, T.val.number)
+                        .stat(
+                            'Byte differences',
+                            String(differences),
+                            differences === 0 ? T.status.success : T.status.error,
+                        )
+                        .render(),
                 );
                 console.log('');
 
                 if (differences === 0) {
-                    console.log(box(
-                        `${T.status.success('✓')} Perfect round-trip — bytecode is losslessly preserved.`,
-                        'PASS'
-                    ));
+                    console.log(
+                        box(`${T.status.success('✓')} Perfect round-trip — bytecode is losslessly preserved.`, 'PASS'),
+                    );
                 } else {
-                    console.log(box(
-                        `${T.status.error('✗')} ${differences} byte(s) differ between original and re-assembled output.`,
-                        'FAIL'
-                    ));
+                    console.log(
+                        box(
+                            `${T.status.error('✗')} ${differences} byte(s) differ between original and re-assembled output.`,
+                            'FAIL',
+                        ),
+                    );
                     process.exit(1);
                 }
             });

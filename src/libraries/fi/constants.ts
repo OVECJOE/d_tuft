@@ -11,16 +11,10 @@ export const OP = {
     RETURN: 0xf3,
     REVERT: 0xfd,
     INVALID: 0xfe,
-    SELFDESTRUCT: 0xff
+    SELFDESTRUCT: 0xff,
 } as const;
 
 /**
  * Opcodes that unconditionally terminate a code path
  */
-export const TERMINAL_OPCODES: Set<number> = new Set([
-    OP.STOP,
-    OP.RETURN,
-    OP.REVERT,
-    OP.INVALID,
-    OP.SELFDESTRUCT
-]);
+export const TERMINAL_OPCODES: Set<number> = new Set([OP.STOP, OP.RETURN, OP.REVERT, OP.INVALID, OP.SELFDESTRUCT]);

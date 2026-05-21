@@ -1,4 +1,4 @@
-import { describe, test, expect } from 'vitest';
+import { describe, expect, test } from 'vitest';
 import { BytecodeParser } from '../../src/core/parser';
 import { hexToBytes } from '../../src/utils/hex';
 
@@ -44,5 +44,5 @@ describe('BytecodeParser', () => {
 
         expect(result.instructions[0].opcode.mnemonic).toBe('INVALID');
         expect(result.warnings).toHaveLength(1);
-    })
+    });
 });

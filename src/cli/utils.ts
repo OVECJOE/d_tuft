@@ -2,9 +2,10 @@
  * CLI utility helpers — styled with the d_tuft design system.
  * All raw chalk usage has been replaced by T.* tokens.
  */
+
+import { readFile } from 'node:fs/promises';
+import { stripAnsi, T } from '~~/cli/ui';
 import type { AssemblyLine } from '~~/core/types';
-import { T, stripAnsi } from '~~/cli/ui';
-import { readFile } from "node:fs/promises";
 
 export type CompareFormat = 'bytecode' | 'assembly';
 
@@ -36,7 +37,7 @@ export function stopSpinner(): void {
         clearInterval(spinnerInterval);
         spinnerInterval = null;
     }
-    process.stderr.write('\r' + ' '.repeat(80) + '\r');
+    process.stderr.write(`\r${' '.repeat(80)}\r`);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -71,7 +72,7 @@ export function hint(message: string): string {
 
 export function sectionHeader(title: string, width = 60): string {
     const pad = Math.max(0, width - title.length - 4);
-    return T.chrome.border('── ') + T.text.heading(title) + T.chrome.sep(' ' + '─'.repeat(pad));
+    return T.chrome.border('── ') + T.text.heading(title) + T.chrome.sep(` ${'─'.repeat(pad)}`);
 }
 
 export function sectionFooter(width = 60): string {
@@ -97,7 +98,7 @@ export function resultHeader(command: string, file: string): string {
 export function box(content: string, title?: string): string {
     const lines = content.split('\n');
     const titleVisible = title ? title.length + 2 : 0;
-    const maxWidth = Math.max(...lines.map(l => stripAnsi(l).length), titleVisible);
+    const maxWidth = Math.max(...lines.map((l) => stripAnsi(l).length), titleVisible);
     const B = T.chrome.border;
     const H = T.text.heading;
 
@@ -109,15 +110,17 @@ export function box(content: string, title?: string): string {
         const rp = sides - lp;
         top = B('╔') + B('═'.repeat(lp)) + H(` ${title} `) + B('═'.repeat(rp)) + B('╗');
     } else {
-        top = B('╔' + '═'.repeat(maxWidth + 2) + '╗');
+        top = B(`╔${'═'.repeat(maxWidth + 2)}╗`);
     }
 
-    const middle = lines.map(line => {
-        const padding = maxWidth - stripAnsi(line).length;
-        return `${B('║')} ${line}${' '.repeat(padding + 1)}${B('║')}`;
-    }).join('\n');
+    const middle = lines
+        .map((line) => {
+            const padding = maxWidth - stripAnsi(line).length;
+            return `${B('║')} ${line}${' '.repeat(padding + 1)}${B('║')}`;
+        })
+        .join('\n');
 
-    const bottom = B('╚' + '═'.repeat(maxWidth + 2) + '╝');
+    const bottom = B(`╚${'═'.repeat(maxWidth + 2)}╝`);
     return `${top}\n${middle}\n${bottom}`;
 }
 
@@ -145,16 +148,18 @@ export async function tryCatch<T>(fn: () => T | Promise<T>, defaultValue?: T): P
 }
 
 export async function detectFormat(...args: string[]): Promise<CompareFormat[]> {
-    return Promise.all(args.map(async (arg) => {
-        const content = await readFile(arg, 'utf-8');
-        const lines = content.split('\n').map(l => l.trim());
-        const hasHex = lines.some(l => /^0x[0-9a-fA-F]+$/.test(l));
-        const hasMnemonics = lines.some(l => /^[A-Z]+/.test(l));
-        if (hasMnemonics && !hasHex) return 'assembly';
-        if (!hasMnemonics && hasHex) return 'bytecode';
-        console.warn(T.status.warn(`Warning: Could not detect format of ${arg}. Defaulting to bytecode.`));
-        return 'bytecode';
-    }));
+    return Promise.all(
+        args.map(async (arg) => {
+            const content = await readFile(arg, 'utf-8');
+            const lines = content.split('\n').map((l) => l.trim());
+            const hasHex = lines.some((l) => /^0x[0-9a-fA-F]+$/.test(l));
+            const hasMnemonics = lines.some((l) => /^[A-Z]+/.test(l));
+            if (hasMnemonics && !hasHex) return 'assembly';
+            if (!hasMnemonics && hasHex) return 'bytecode';
+            console.warn(T.status.warn(`Warning: Could not detect format of ${arg}. Defaulting to bytecode.`));
+            return 'bytecode';
+        }),
+    );
 }
 
 export function parseAssemblyFile(content: string): AssemblyLine[] {
@@ -174,10 +179,12 @@ export async function readAndDetectFiles(...paths: string[]): Promise<{ content:
     const formats = await detectFormat(...paths);
     const uniqueFormats = new Set(formats);
     if (uniqueFormats.size > 1) {
-        console.error(error('Input files have different formats. Please provide files of the same type for comparison.'));
+        console.error(
+            error('Input files have different formats. Please provide files of the same type for comparison.'),
+        );
         console.error(hint('Use --format bytecode or --format assembly to force a specific format'));
         process.exit(1);
     }
-    const contents = await Promise.all(paths.map(path => readFile(path, 'utf-8')));
+    const contents = await Promise.all(paths.map((path) => readFile(path, 'utf-8')));
     return contents.map((content, index) => ({ content, format: formats[index] as CompareFormat }));
 }

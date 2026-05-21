@@ -1,10 +1,10 @@
-import { describe, test, expect } from 'vitest';
-import { decompile, Decompiler } from '../../src/libraries/decompiler/decompiler';
-import { buildCFG } from '../../src/libraries/decompiler/cfg';
-import { inferABI } from '../../src/libraries/decompiler/abi-inference';
-import { analyzeStorage } from '../../src/libraries/decompiler/storage';
-import { matchPatterns } from '../../src/libraries/decompiler/signatures';
+import { describe, expect, test } from 'vitest';
 import { disassemble } from '../../src/core/parser';
+import { inferABI } from '../../src/libraries/decompiler/abi-inference';
+import { buildCFG } from '../../src/libraries/decompiler/cfg';
+import { decompile } from '../../src/libraries/decompiler/decompiler';
+import { matchPatterns } from '../../src/libraries/decompiler/signatures';
+import { analyzeStorage } from '../../src/libraries/decompiler/storage';
 
 describe('CFGBuilder', () => {
     test('builds CFG from simple bytecode', () => {
@@ -41,32 +41,38 @@ describe('CFGBuilder', () => {
 
 describe('ABIInferrer', () => {
     test('infers known function signatures', () => {
-        const selectors = [{
-            selector: '0x18160ddd',
-            startPC: 0,
-            body: disassemble('0x60005460005260206000f3').instructions,
-        }];
+        const selectors = [
+            {
+                selector: '0x18160ddd',
+                startPC: 0,
+                body: disassemble('0x60005460005260206000f3').instructions,
+            },
+        ];
         const inferred = inferABI([], selectors);
         expect(inferred[0]?.name).toBe('totalSupply');
         expect(inferred[0]?.confidence).toBeGreaterThan(0.9);
     });
 
     test('infers transfer function', () => {
-        const selectors = [{
-            selector: '0xa9059cbb',
-            startPC: 0,
-            body: disassemble('0x60005460005260206000f3').instructions,
-        }];
+        const selectors = [
+            {
+                selector: '0xa9059cbb',
+                startPC: 0,
+                body: disassemble('0x60005460005260206000f3').instructions,
+            },
+        ];
         const inferred = inferABI([], selectors);
         expect(inferred[0]?.name).toBe('transfer');
     });
 
     test('returns unknown for unrecognized selectors', () => {
-        const selectors = [{
-            selector: '0xdeadbeef',
-            startPC: 0,
-            body: disassemble('0x60005460005260206000f3').instructions,
-        }];
+        const selectors = [
+            {
+                selector: '0xdeadbeef',
+                startPC: 0,
+                body: disassemble('0x60005460005260206000f3').instructions,
+            },
+        ];
         const inferred = inferABI([], selectors);
         expect(inferred[0]?.name).toContain('0xdeadbeef');
         expect(inferred[0]?.confidence).toBeLessThan(0.6);
@@ -74,22 +80,26 @@ describe('ABIInferrer', () => {
 
     test('infers state mutability', () => {
         const viewBody = disassemble('0x60005460005260206000f3').instructions;
-        const selectors = [{
-            selector: '0x70a08231',
-            startPC: 0,
-            body: viewBody,
-        }];
+        const selectors = [
+            {
+                selector: '0x70a08231',
+                startPC: 0,
+                body: viewBody,
+            },
+        ];
         const inferred = inferABI([], selectors);
         expect(inferred[0]?.stateMutability).toBe('view');
     });
 
     test('infers nonpayable for SSTORE', () => {
         const writeBody = disassemble('0x6001600055').instructions;
-        const selectors = [{
-            selector: '0x12345678',
-            startPC: 0,
-            body: writeBody,
-        }];
+        const selectors = [
+            {
+                selector: '0x12345678',
+                startPC: 0,
+                body: writeBody,
+            },
+        ];
         const inferred = inferABI([], selectors);
         expect(inferred[0]?.stateMutability).toBe('nonpayable');
     });
@@ -127,10 +137,7 @@ describe('StorageAnalyzer', () => {
 
 describe('SignatureMatcher', () => {
     test('matches ERC20 pattern', () => {
-        const selectors = [
-            '0x18160ddd', '0x70a08231', '0xa9059cbb',
-            '0x095ea7b3', '0x23b872dd', '0xdd62ed3e',
-        ];
+        const selectors = ['0x18160ddd', '0x70a08231', '0xa9059cbb', '0x095ea7b3', '0x23b872dd', '0xdd62ed3e'];
         const matches = matchPatterns(selectors);
         const erc20 = matches.find((m) => m.name === 'ERC20');
         expect(erc20).toBeTruthy();
@@ -151,10 +158,7 @@ describe('SignatureMatcher', () => {
     });
 
     test('sorts by confidence', () => {
-        const selectors = [
-            '0x18160ddd', '0x70a08231', '0xa9059cbb',
-            '0x8da5cb5b',
-        ];
+        const selectors = ['0x18160ddd', '0x70a08231', '0xa9059cbb', '0x8da5cb5b'];
         const matches = matchPatterns(selectors);
         for (let i = 1; i < matches.length; i++) {
             expect(matches[i]!.confidence).toBeLessThanOrEqual(matches[i - 1]!.confidence);
@@ -171,7 +175,9 @@ describe('Decompiler', () => {
     });
 
     test('identifies contract name from patterns', () => {
-        const result = decompile('0x608060405234801561001057600080fd5b50600436106100415760003560e01c806306fdde0314610046578063095ea7b31461006457806318160ddd14610084575b600080fd5b');
+        const result = decompile(
+            '0x608060405234801561001057600080fd5b50600436106100415760003560e01c806306fdde0314610046578063095ea7b31461006457806318160ddd14610084575b600080fd5b',
+        );
         expect(result.name).toBeTruthy();
     });
 
@@ -183,19 +189,20 @@ describe('Decompiler', () => {
 
     test('generates warnings for SELFDESTRUCT', () => {
         const result = decompile('0xff');
-        expect(result.warnings.some(w => w.includes('SELFDESTRUCT'))).toBe(true);
+        expect(result.warnings.some((w) => w.includes('SELFDESTRUCT'))).toBe(true);
     });
 
     test('generates warnings for external calls', () => {
         const result = decompile('0x6000600060006000600060006000f1');
-        expect(result.warnings.some(w => w.includes('external calls'))).toBe(true);
+        expect(result.warnings.some((w) => w.includes('external calls'))).toBe(true);
     });
 
     test('computes overall confidence', () => {
         const result = decompile('0x600160020100');
-        const confidence = result.functions.length > 0
-            ? result.functions.reduce((sum, f) => sum + f.confidence, 0) / result.functions.length * 100
-            : 0;
+        const confidence =
+            result.functions.length > 0
+                ? (result.functions.reduce((sum, f) => sum + f.confidence, 0) / result.functions.length) * 100
+                : 0;
         expect(confidence).toBeGreaterThanOrEqual(0);
         expect(confidence).toBeLessThanOrEqual(100);
     });
@@ -224,7 +231,8 @@ describe('Decompiler', () => {
 
 describe('End-to-end decompilation', () => {
     test('full pipeline on ERC20-like bytecode', () => {
-        const bytecode = '0x608060405234801561001057600080fd5b50600436106100415760003560e01c806306fdde0314610046578063095ea7b31461006457806318160ddd14610084575b600080fd5b';
+        const bytecode =
+            '0x608060405234801561001057600080fd5b50600436106100415760003560e01c806306fdde0314610046578063095ea7b31461006457806318160ddd14610084575b600080fd5b';
         const result = decompile(bytecode);
 
         expect(result.functions.length).toBeGreaterThan(0);

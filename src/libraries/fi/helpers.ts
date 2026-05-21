@@ -1,18 +1,18 @@
-import { keccak256 } from "js-sha3";
-import type { ABIEntry, ABIParameter } from "../../core/types";
+import { keccak256 } from 'js-sha3';
+import type { ABIEntry, ABIParameter } from '../../core/types';
 
 export function encodeParam(param: ABIParameter): string {
-    if (param.type === "tuple" || param.type.startsWith("tuple[")) {
-        const inner = (param.components || []).map(encodeParam).join(",");
-        const arraySuffix = param.type.slice("tuple".length);
+    if (param.type === 'tuple' || param.type.startsWith('tuple[')) {
+        const inner = (param.components || []).map(encodeParam).join(',');
+        const arraySuffix = param.type.slice('tuple'.length);
         return `(${inner})${arraySuffix}`;
     }
     return param.type;
 }
 
 export function buildSignature(entry: ABIEntry): string {
-    const name = entry.name || "";
-    const params = (entry.inputs || []).map(encodeParam).join(",");
+    const name = entry.name || '';
+    const params = (entry.inputs || []).map(encodeParam).join(',');
     return `${name}(${params})`;
 }
 

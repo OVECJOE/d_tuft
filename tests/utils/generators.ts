@@ -8,19 +8,19 @@ import type { Opcode } from '../../src/core/types';
  */
 export function generateAllOpcodesBytecode(): Uint8Array {
     const bytes: number[] = [];
-    
+
     // Iterate through all possible opcode values (0x00 - 0xff)
     for (let i = 0; i <= 0xff; i++) {
         const opcode = OPCODES[i as keyof typeof OPCODES] as Opcode | undefined;
-        
+
         // Skip undefined opcodes (gaps in the EVM opcode table)
         if (!opcode) {
             continue;
         }
-        
+
         // Add the opcode byte
         bytes.push(opcode.value);
-        
+
         // For PUSH opcodes, add the required immediate bytes
         if (opcode.pushBytes && opcode.pushBytes > 0) {
             for (let j = 0; j < opcode.pushBytes; j++) {
@@ -30,6 +30,6 @@ export function generateAllOpcodesBytecode(): Uint8Array {
             }
         }
     }
-    
+
     return new Uint8Array(bytes);
 }

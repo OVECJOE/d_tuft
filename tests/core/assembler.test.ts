@@ -1,17 +1,17 @@
-import { describe, test, expect } from "vitest";
-import { OpcodeAssembler } from "../../src/core/assembler";
-import { bytesToHex } from "../../src/utils/hex";
+import { describe, expect, test } from 'vitest';
+import { OpcodeAssembler } from '../../src/core/assembler';
+import { bytesToHex } from '../../src/utils/hex';
 
-describe("OpcodeAssembler", () => {
+describe('OpcodeAssembler', () => {
     test('assembles simple operations', () => {
         const assembler = new OpcodeAssembler();
         const bytecode = assembler.assemble({
             lines: [
                 { mnemonic: 'PUSH1', operand: '0x01' },
                 { mnemonic: 'PUSH1', operand: '0x02' },
-                { mnemonic: 'ADD' }
+                { mnemonic: 'ADD' },
             ],
-            warnings: []
+            warnings: [],
         });
 
         expect(bytesToHex(bytecode)).toBe('0x6001600201');
@@ -21,9 +21,9 @@ describe("OpcodeAssembler", () => {
         const assembler = new OpcodeAssembler();
         const bytecode = assembler.assemble({
             lines: [
-                { mnemonic: 'PUSH2', operand: '0x01' } // Should pad to 2 bytes
+                { mnemonic: 'PUSH2', operand: '0x01' }, // Should pad to 2 bytes
             ],
-            warnings: []
+            warnings: [],
         });
 
         expect(bytesToHex(bytecode)).toBe('0x610001');
@@ -35,7 +35,7 @@ describe("OpcodeAssembler", () => {
         expect(() => {
             assembler.assemble({
                 lines: [{ mnemonic: 'UNKNOWN' }],
-                warnings: []
+                warnings: [],
             });
         }).toThrow('Unknown mnemonic');
     });

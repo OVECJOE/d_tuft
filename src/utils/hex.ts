@@ -25,7 +25,7 @@ export function normalizeHex(str: string): string {
     const prefix = str.startsWith('0x') ? '0x' : '';
     const cleaned = str.startsWith('0x') ? str.slice(2) : str;
     if (cleaned.length % 2 === 1) {
-        return prefix + '0' + cleaned;
+        return `${prefix}0${cleaned}`;
     }
     return str;
 }
@@ -72,9 +72,12 @@ export function hexToBytes(hex: string): Uint8Array {
  * @example bytesToHex(Uint8Array([0x12, 0x34, 0x56])) -> '0x123456'
  */
 export function bytesToHex(bytes: Uint8Array): string {
-    return '0x' + Array.from(bytes)
-        .map(byte => byte.toString(16).padStart(2, '0'))
-        .join('');
+    return (
+        '0x' +
+        Array.from(bytes)
+            .map((byte) => byte.toString(16).padStart(2, '0'))
+            .join('')
+    );
 }
 
 /**

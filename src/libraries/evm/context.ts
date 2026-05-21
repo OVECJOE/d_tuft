@@ -45,7 +45,7 @@ export const DEFAULT_BLOCK: BlockContext = {
     chainId: 1n,
     baseFee: 1_000_000_000n,
     blobBaseFee: 1_000_000_000n,
-    blockHash: () => '0x' + '00'.repeat(32),
+    blockHash: () => `0x${'00'.repeat(32)}`,
 };
 
 export const DEFAULT_TX: TxContext = {

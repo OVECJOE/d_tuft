@@ -11,8 +11,9 @@
  *   ║ 00000│ PUSH1        │ 0x80                    │ (0)→(1)  +1  ║
  *   ╚══════╧══════════════╧═════════════════════════╧══════════════╝
  */
+
+import { padL, padR, truncate } from './ansi';
 import { T } from './theme';
-import { padR, padL, truncate } from './ansi';
 
 export type Alignment = 'left' | 'right' | 'center';
 
@@ -52,20 +53,14 @@ export class Table {
         const lines: string[] = [];
 
         // ── Border/separator factories ─────────────────────────────────────────
-        const hline = (
-            l: string, mid: string, r: string,
-            colSep: string,
-            fill = '═'
-        ): string =>
-            B(l + cols.map(c => fill.repeat(c.width + 2)).join(colSep) + r);
+        const hline = (l: string, _mid: string, r: string, colSep: string, fill = '═'): string =>
+            B(l + cols.map((c) => fill.repeat(c.width + 2)).join(colSep) + r);
 
         // ── Top border ─────────────────────────────────────────────────────────
         lines.push(hline('╔', '═', '╗', '╤'));
 
         // ── Header row ─────────────────────────────────────────────────────────
-        const headerCells = cols.map(c =>
-            ' ' + padR(H(c.header), c.width) + ' '
-        );
+        const headerCells = cols.map((c) => ` ${padR(H(c.header), c.width)} `);
         lines.push(B('║') + headerCells.join(B('│')) + B('║'));
 
         // ── Header/body separator ──────────────────────────────────────────────
@@ -75,11 +70,15 @@ export class Table {
         for (const { cells, highlight } of this._rows) {
             // Pick border color by highlight kind
             const borderColor =
-                highlight === 'jumpdest' ? T.op.jumpdest :
-                    highlight === 'warn' ? T.status.warn :
-                        highlight === 'error' ? T.status.error :
-                            highlight === 'success' ? T.status.success :
-                                B;
+                highlight === 'jumpdest'
+                    ? T.op.jumpdest
+                    : highlight === 'warn'
+                      ? T.status.warn
+                      : highlight === 'error'
+                        ? T.status.error
+                        : highlight === 'success'
+                          ? T.status.success
+                          : B;
 
             const border = borderColor('║');
             const sep = highlight !== 'none' ? borderColor('│') : B('│');
@@ -89,10 +88,12 @@ export class Table {
                 const plain = truncate(raw, col.width);
                 const colored = col.render ? col.render(plain) : plain;
                 const padded =
-                    col.align === 'right' ? padL(colored, col.width) :
-                        col.align === 'center' ? /* padC — reuse padR */ padR(colored, col.width) :
-                            padR(colored, col.width);
-                return ' ' + padded + ' ';
+                    col.align === 'right'
+                        ? padL(colored, col.width)
+                        : col.align === 'center'
+                          ? /* padC — reuse padR */ padR(colored, col.width)
+                          : padR(colored, col.width);
+                return ` ${padded} `;
             });
 
             lines.push(border + rendered.join(sep) + border);

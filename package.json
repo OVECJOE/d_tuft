@@ -1,47 +1,51 @@
 {
-  "name": "d_tuft",
-  "version": "1.0.0",
-  "description": "Bidirectional EVM bytecode ↔ opcode transformer and analysis toolkit with lightweight execution engine",
-  "type": "module",
-  "module": "index.ts",
-  "bin": {
-    "d_tuft": "./src/cli/index.ts"
-  },
-  "scripts": {
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage",
-    "typecheck": "tsc --noEmit",
-    "build": "bun build ./src/cli/index.ts --compile --outfile d_tuft --target bun-linux-x64",
-    "start": "bun run src/cli/index.ts"
-  },
-  "devDependencies": {
-    "@types/bun": "latest"
-  },
-  "peerDependencies": {
-    "typescript": "^5"
-  },
-  "dependencies": {
-    "chalk": "^5.6.2",
-    "commander": "^14.0.3",
-    "js-sha3": "^0.9.3",
-    "vitest": "^4.0.18"
-  },
-  "keywords": [
-    "evm",
-    "bytecode",
-    "opcode",
-    "disassembler",
-    "assembler",
-    "ethereum",
-    "smart-contract",
-    "security",
-    "audit"
-  ],
-  "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/OVECJOE/d_tuft"
-  },
-  "author": "OVECJOE"
+    "name": "d_tuft",
+    "version": "1.0.0",
+    "description": "Bidirectional EVM bytecode ↔ opcode transformer and analysis toolkit with lightweight execution engine",
+    "type": "module",
+    "module": "index.ts",
+    "bin": {
+        "d_tuft": "./src/cli/index.ts"
+    },
+    "scripts": {
+        "test": "vitest run",
+        "test:watch": "vitest",
+        "test:coverage": "vitest run --coverage",
+        "typecheck": "tsc --noEmit",
+        "lint": "biome check .",
+        "lint:fix": "biome check --apply .",
+        "format": "biome format --write .",
+        "build": "bun build ./src/cli/index.ts --compile --outfile d_tuft --target bun-linux-x64",
+        "start": "bun run src/cli/index.ts"
+    },
+    "devDependencies": {
+        "@biomejs/biome": "^2.4.15",
+        "@types/bun": "latest"
+    },
+    "peerDependencies": {
+        "typescript": "^5"
+    },
+    "dependencies": {
+        "chalk": "^5.6.2",
+        "commander": "^14.0.3",
+        "js-sha3": "^0.9.3",
+        "vitest": "^4.0.18"
+    },
+    "keywords": [
+        "evm",
+        "bytecode",
+        "opcode",
+        "disassembler",
+        "assembler",
+        "ethereum",
+        "smart-contract",
+        "security",
+        "audit"
+    ],
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/OVECJOE/d_tuft"
+    },
+    "author": "OVECJOE"
 }

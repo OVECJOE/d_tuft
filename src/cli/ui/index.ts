@@ -3,8 +3,8 @@
  * Import from here; never from sub-modules directly.
  */
 export * from './ansi';
-export * from './theme';
-export { Panel } from './panel';
-export { Table } from './table';
-export type { ColDef, RowHighlight } from './table';
 export type { PanelItem } from './panel';
+export { Panel } from './panel';
+export type { ColDef, RowHighlight } from './table';
+export { Table } from './table';
+export * from './theme';

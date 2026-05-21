@@ -1,5 +1,26 @@
 export * from './assembler';
-export * from './parser';
 export * from './opcodes';
+export * from './parser';
+export type {
+    ABI,
+    ABIEntry,
+    ABIParameter,
+    AssemblyLine,
+    AssemblyOptions,
+    AssemblyProgram,
+    DisassemblyOptions,
+    DisassemblyResult,
+    DispatcherEntry,
+    FunctionGasEstimate,
+    FunctionMap,
+    GasHotspot,
+    GasReport,
+    Instruction,
+    Opcode,
+    OpcodeGasEntry,
+    SelectorDiff,
+    SimulationResult,
+    StackError,
+    StackProfile,
+} from './types';
 export * from './validator';
-export { type Opcode, type Instruction, type DisassemblyResult, type AssemblyLine, type AssemblyProgram, type DisassemblyOptions, type AssemblyOptions, type FunctionMap, type ABIParameter, type ABIEntry, type ABI, type DispatcherEntry, type SelectorDiff, type OpcodeGasEntry, type GasReport, type FunctionGasEstimate, type GasHotspot, type StackError, type SimulationResult, type StackProfile } from './types';

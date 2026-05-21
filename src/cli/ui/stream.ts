@@ -15,15 +15,8 @@ export interface StreamOptions {
     skipNonTty?: boolean;
 }
 
-export async function streamText(
-    text: string,
-    options: StreamOptions = {}
-): Promise<void> {
-    const {
-        chunkDelay = 2,
-        chunkSize = 3,
-        skipNonTty = true,
-    } = options;
+export async function streamText(text: string, options: StreamOptions = {}): Promise<void> {
+    const { chunkDelay = 2, chunkSize = 3, skipNonTty = true } = options;
 
     // If not a TTY, just print everything at once
     if (skipNonTty && !process.stdout.isTTY) {
@@ -50,15 +43,8 @@ export async function streamText(
     }
 }
 
-export async function streamHighlighted(
-    text: string,
-    options: StreamOptions = {}
-): Promise<void> {
-    const {
-        chunkDelay = 2,
-        chunkSize = 4,
-        skipNonTty = true,
-    } = options;
+export async function streamHighlighted(text: string, options: StreamOptions = {}): Promise<void> {
+    const { chunkDelay = 2, chunkSize = 4, skipNonTty = true } = options;
 
     if (skipNonTty && !process.stdout.isTTY) {
         process.stdout.write(text);

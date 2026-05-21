@@ -1,4 +1,4 @@
-import { describe, test, expect } from 'vitest';
+import { describe, expect, test } from 'vitest';
 import { disassemble } from '../../src/core/parser';
 import { validate } from '../../src/core/validator';
 
@@ -13,24 +13,24 @@ describe('BytecodeValidator', () => {
     test('detects no terminal warning', () => {
         const result = disassemble('0x6001600201');
         const validation = validate(result);
-        expect(validation.warnings.some(w => w.kind === 'no_terminal')).toBe(true);
+        expect(validation.warnings.some((w) => w.kind === 'no_terminal')).toBe(true);
     });
 
     test('detects INVALID opcode warning', () => {
         const result = disassemble('0xfe');
         const validation = validate(result);
-        expect(validation.warnings.some(w => w.kind === 'invalid_opcode')).toBe(true);
+        expect(validation.warnings.some((w) => w.kind === 'invalid_opcode')).toBe(true);
     });
 
     test('valid JUMP to JUMPDEST passes', () => {
         const result = disassemble('0x600456005b00');
         const validation = validate(result);
-        expect(validation.errors.some(e => e.kind === 'invalid_jumpdest')).toBe(false);
+        expect(validation.errors.some((e) => e.kind === 'invalid_jumpdest')).toBe(false);
     });
 
     test('truncated PUSH generates error', () => {
         const result = disassemble('0x6112');
         const validation = validate(result);
-        expect(validation.errors.some(e => e.kind === 'truncated_push')).toBe(true);
+        expect(validation.errors.some((e) => e.kind === 'truncated_push')).toBe(true);
     });
 });

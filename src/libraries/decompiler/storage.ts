@@ -24,10 +24,7 @@ const STORAGE_PATTERNS = new Map<string, { type: StorageType; name: string }>([
 ]);
 
 export class StorageAnalyzer {
-    analyze(
-        body: Instruction[],
-        selector?: string
-    ): StorageSlot[] {
+    analyze(body: Instruction[], selector?: string): StorageSlot[] {
         const slots = new Map<string, StorageSlot>();
 
         for (let i = 0; i < body.length; i++) {
@@ -86,11 +83,16 @@ export class StorageAnalyzer {
                 const right = this.resolveSlotKey(i, body);
                 if (left !== null && right !== null) {
                     switch (op) {
-                        case 0x01: return left + right;
-                        case 0x02: return left * right;
-                        case 0x16: return left & right;
-                        case 0x17: return left | right;
-                        case 0x18: return left ^ right;
+                        case 0x01:
+                            return left + right;
+                        case 0x02:
+                            return left * right;
+                        case 0x16:
+                            return left & right;
+                        case 0x17:
+                            return left | right;
+                        case 0x18:
+                            return left ^ right;
                     }
                 }
             }
@@ -99,7 +101,7 @@ export class StorageAnalyzer {
         return null;
     }
 
-    private inferSlotType(slot: StorageSlot, body: Instruction[]): void {
+    private inferSlotType(slot: StorageSlot, _body: Instruction[]): void {
         const pattern = STORAGE_PATTERNS.get(slot.slot.toString(16));
         if (pattern) {
             slot.inferredType = pattern.type;

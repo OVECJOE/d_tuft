@@ -1,12 +1,11 @@
-import type { Instruction } from '../../core/types';
 import { disassemble } from '../../core/parser';
+import type { Instruction } from '../../core/types';
+import { hexToBytes } from '../../utils/hex';
 import { FunctionIdentifier } from '../fi';
-import { buildCFG, type ControlFlowGraph } from './cfg';
-import { inferABI, type InferredFunction } from './abi-inference';
-import { analyzeStorage, type StorageSlot, type StorageType } from './storage';
-import { matchPatterns, type MatchedPattern } from './signatures';
-import { bytesToHex, hexToBytes } from '../../utils/hex';
-import { analyzeDataFlow, type DataFlowResult, type Expression } from './data-flow';
+import { type InferredFunction, inferABI } from './abi-inference';
+import { analyzeDataFlow, type Expression } from './data-flow';
+import { type MatchedPattern, matchPatterns } from './signatures';
+import { analyzeStorage, type StorageSlot } from './storage';
 
 export interface DecompiledFunction {
     selector: string;
@@ -75,14 +74,12 @@ interface InternalFunction {
 export class Decompiler {
     private readonly instructions: Instruction[];
     private readonly fi: FunctionIdentifier;
-    private readonly cfg: ControlFlowGraph;
     private readonly options: Required<DecompileOptions>;
 
     constructor(bytecode: Uint8Array | string, options: DecompileOptions = {}) {
         const code = typeof bytecode === 'string' ? hexToBytes(bytecode) : bytecode;
         this.instructions = disassemble(code).instructions;
         this.fi = new FunctionIdentifier(code);
-        this.cfg = buildCFG(this.instructions);
         this.options = {
             includeComments: true,
             includeStorage: true,
@@ -107,7 +104,7 @@ export class Decompiler {
         const allStorage = this.analyzeAllStorage(functionMaps);
         const patterns = matchPatterns(
             functionMaps.map((m) => m.selector.toLowerCase()),
-            allStorage.map((s) => Number(s.slot))
+            allStorage.map((s) => Number(s.slot)),
         );
 
         const obfState: ObfuscatorState = {
@@ -140,7 +137,15 @@ export class Decompiler {
 
         const name = 'C_a1b2c3';
         const warnings = this.generateWarnings(functions, allStorage);
-        const solidity = this.generateSolidity(name, functions, allStorage, patterns, warnings, obfState, internalBodies);
+        const solidity = this.generateSolidity(
+            name,
+            functions,
+            allStorage,
+            patterns,
+            warnings,
+            obfState,
+            internalBodies,
+        );
 
         return {
             name,
@@ -156,13 +161,15 @@ export class Decompiler {
         };
     }
 
-    private extractInternalFunctions(functionMaps: Array<{ selector: string; startOffset: number; body: Instruction[] }>): InternalFunction[] {
+    private extractInternalFunctions(
+        functionMaps: Array<{ selector: string; startOffset: number; body: Instruction[] }>,
+    ): InternalFunction[] {
         const dispatcherDestinations = new Set(functionMaps.map((m) => m.startOffset));
         const allStarts = new Set(functionMaps.map((m) => m.startOffset));
 
         // Find all JUMPDESTs not in the dispatcher
         const internalJumps = this.instructions.filter(
-            (instr) => instr.opcode.value === 0x5b && !dispatcherDestinations.has(instr.pc)
+            (instr) => instr.opcode.value === 0x5b && !dispatcherDestinations.has(instr.pc),
         );
 
         const internals: InternalFunction[] = [];
@@ -192,7 +199,8 @@ export class Decompiler {
             }
 
             const body = this.instructions.slice(startIdx, endIdx);
-            if (body.length > 3) { // Skip trivial bodies
+            if (body.length > 3) {
+                // Skip trivial bodies
                 internals.push({ pc: jump.pc, body });
             }
         }
@@ -217,11 +225,7 @@ export class Decompiler {
         return null;
     }
 
-    private generateInternalBody(
-        body: Instruction[],
-        allStorage: StorageSlot[],
-        obfState: ObfuscatorState
-    ): string {
+    private generateInternalBody(body: Instruction[], allStorage: StorageSlot[], obfState: ObfuscatorState): string {
         const flow = analyzeDataFlow(body);
         const storageNames = new Map<string, string>();
         for (const slot of allStorage) {
@@ -231,7 +235,10 @@ export class Decompiler {
             }
         }
 
-        interface Stmt { pc: number; text: string }
+        interface Stmt {
+            pc: number;
+            text: string;
+        }
         const stmts: Stmt[] = [];
         const pad = '        ';
 
@@ -239,7 +246,14 @@ export class Decompiler {
             try {
                 const slotStr = this.exprToString(w.slot, storageNames);
                 const valueStr = this.exprToString(w.value, storageNames);
-                if (valueStr && valueStr !== '?' && !valueStr.includes('d_') && !slotStr.includes('keccak256') && !slotStr.includes('memory[') && !valueStr.includes('?')) {
+                if (
+                    valueStr &&
+                    valueStr !== '?' &&
+                    !valueStr.includes('d_') &&
+                    !slotStr.includes('keccak256') &&
+                    !slotStr.includes('memory[') &&
+                    !valueStr.includes('?')
+                ) {
                     const slotName = this.resolveStorageSlot(w.slot, storageNames);
                     stmts.push({ pc: w.pc, text: `${pad}${slotName} = ${valueStr};` });
                 }
@@ -252,7 +266,8 @@ export class Decompiler {
             try {
                 const target = this.exprToString(c.target, storageNames);
                 const value = this.exprToString(c.value, storageNames);
-                if (target.includes('d_') || target === '?' || value.includes('keccak256') || value.includes('memory[')) continue;
+                if (target.includes('d_') || target === '?' || value.includes('keccak256') || value.includes('memory['))
+                    continue;
                 if (c.value.kind === 'literal' && c.value.value === 0n) {
                     stmts.push({ pc: c.pc, text: `${pad}(bool success_, ) = ${target}.call("");` });
                 } else {
@@ -329,7 +344,7 @@ export class Decompiler {
 
     private refineStorageTypes(
         slotMap: Map<string, StorageSlot>,
-        functionMaps: Array<{ selector: string; body: Instruction[] }>
+        functionMaps: Array<{ selector: string; body: Instruction[] }>,
     ): void {
         for (const [key, slot] of slotMap) {
             const slotBigInt = slot.slot;
@@ -343,7 +358,11 @@ export class Decompiler {
 
                 for (const write of flow.storageWrites) {
                     if (this.slotMatches(write.slot, slotBigInt)) {
-                        if (write.value.kind === 'literal' && write.value.value < (1n << 160n) && write.value.value > 0n) {
+                        if (
+                            write.value.kind === 'literal' &&
+                            write.value.value < 1n << 160n &&
+                            write.value.value > 0n
+                        ) {
                             hasAddressMasking = true;
                         }
                         if (write.value.kind === 'unop' && write.value.op === 'address(') {
@@ -396,8 +415,8 @@ export class Decompiler {
         allStorage: StorageSlot[],
         obfState: ObfuscatorState,
         funcIndex: number,
-        internalFuncs: Array<{ pc: number; body: Instruction[] }>,
-        internalNames: Map<number, string>
+        _internalFuncs: Array<{ pc: number; body: Instruction[] }>,
+        internalNames: Map<number, string>,
     ): DecompiledFunction {
         const paramNames = new Map<number, string>();
         for (let i = 0; i < inferred.parameters.length; i++) {
@@ -405,10 +424,12 @@ export class Decompiler {
             paramNames.set(p.calldataOffset, `param${i}`);
         }
 
-        const params = inferred.parameters.map((p, i) => {
-            const type = p.inferredType === 'unknown' ? 'bytes32' : p.inferredType;
-            return `${type} param${i}`;
-        }).join(', ');
+        const params = inferred.parameters
+            .map((p, i) => {
+                const type = p.inferredType === 'unknown' ? 'bytes32' : p.inferredType;
+                return `${type} param${i}`;
+            })
+            .join(', ');
 
         const returnType = inferred.returnType ?? (inferred.stateMutability === 'view' ? 'uint256' : null);
         const mutability = inferred.stateMutability === 'nonpayable' ? '' : ` ${inferred.stateMutability}`;
@@ -452,7 +473,7 @@ export class Decompiler {
         inferred: InferredFunction,
         body: Instruction[],
         storage: StorageSlot[],
-        selector: string
+        selector: string,
     ): number {
         let score = 0.0;
         let factors = 0;
@@ -498,11 +519,11 @@ export class Decompiler {
 
     private generateFunctionBody(
         body: Instruction[],
-        inferred: InferredFunction,
+        _inferred: InferredFunction,
         allStorage: StorageSlot[],
         paramNames: Map<number, string>,
         obfState: ObfuscatorState,
-        calledInternals: string[]
+        calledInternals: string[],
     ): string {
         const flow = analyzeDataFlow(body, paramNames);
         const storageNames = new Map<string, string>();
@@ -527,7 +548,10 @@ export class Decompiler {
             });
         }
 
-        interface Stmt { pc: number; text: string }
+        interface Stmt {
+            pc: number;
+            text: string;
+        }
         const stmts: Stmt[] = [];
         const pad = '        ';
 
@@ -536,7 +560,12 @@ export class Decompiler {
             const slotStr = this.exprToString(w.slot, storageNames);
             const valueStr = this.exprToString(w.value, storageNames);
             // Skip writes with unknown values or keccak256 memory slot patterns
-            if (valueStr && !valueStr.includes('d_') && !slotStr.includes('keccak256') && !slotStr.includes('memory[')) {
+            if (
+                valueStr &&
+                !valueStr.includes('d_') &&
+                !slotStr.includes('keccak256') &&
+                !slotStr.includes('memory[')
+            ) {
                 const slotName = this.resolveStorageSlot(w.slot, storageNames);
                 stmts.push({ pc: w.pc, text: `${pad}${slotName} = ${valueStr};` });
             }
@@ -620,8 +649,8 @@ export class Decompiler {
         const callLines = calledInternals.map((name) => `${pad}${name}();`);
 
         // Find the index of the first terminal statement
-        const terminalIdx = truncated.findIndex((s) =>
-            s.text.includes('return;') || s.text.includes('return ') || s.text.includes('revert();')
+        const terminalIdx = truncated.findIndex(
+            (s) => s.text.includes('return;') || s.text.includes('return ') || s.text.includes('revert();'),
         );
 
         let allLines: string[];
@@ -652,7 +681,12 @@ export class Decompiler {
         return true;
     }
 
-    private isInvertedCondition(body: Instruction[], condPC: number, pcToIdx: Map<number, number>, condition: Expression): boolean {
+    private isInvertedCondition(
+        body: Instruction[],
+        condPC: number,
+        pcToIdx: Map<number, number>,
+        condition: Expression,
+    ): boolean {
         // Check if the condition was inverted (ISZERO before JUMPI)
         const idx = pcToIdx.get(condPC);
         if (idx === undefined) return false;
@@ -727,20 +761,6 @@ export class Decompiler {
         }
     }
 
-    private findJumpTarget(body: Instruction[], idx: number): number | undefined {
-        for (let i = idx - 1; i >= Math.max(0, idx - 3); i--) {
-            const instr = body[i]!;
-            if (instr.opcode.value === 0x5b && instr.immediate) {
-                let value = 0n;
-                for (const byte of instr.immediate) {
-                    value = (value << 8n) | BigInt(byte);
-                }
-                return Number(value);
-            }
-        }
-        return undefined;
-    }
-
     private isRequirePattern(body: Instruction[], jumpDest: number, pcToIdx: Map<number, number>): boolean {
         const startIdx = pcToIdx.get(jumpDest);
         if (startIdx === undefined) return false;
@@ -784,7 +804,9 @@ export class Decompiler {
             warnings.push('Contract contains SELFDESTRUCT — can be destroyed by owner');
         }
 
-        const hasCall = this.instructions.some((i) => i.opcode.mnemonic === 'CALL' || i.opcode.mnemonic === 'DELEGATECALL');
+        const hasCall = this.instructions.some(
+            (i) => i.opcode.mnemonic === 'CALL' || i.opcode.mnemonic === 'DELEGATECALL',
+        );
         if (hasCall) {
             warnings.push('Contract makes external calls — potential reentrancy risk');
         }
@@ -796,10 +818,10 @@ export class Decompiler {
         name: string,
         functions: DecompiledFunction[],
         storage: StorageSlot[],
-        patterns: MatchedPattern[],
-        warnings: string[],
-        obfState: ObfuscatorState,
-        internalBodies: Array<{ name: string; body: string }>
+        _patterns: MatchedPattern[],
+        _warnings: string[],
+        _obfState: ObfuscatorState,
+        internalBodies: Array<{ name: string; body: string }>,
     ): string {
         const lines: string[] = [];
 
@@ -864,7 +886,7 @@ export class Decompiler {
 
     private collectAllEvents(
         functions: DecompiledFunction[],
-        internalBodies: Array<{ name: string; body: string }>
+        internalBodies: Array<{ name: string; body: string }>,
     ): Array<{ name: string; topicCount: number }> {
         const events: Array<{ name: string; topicCount: number }> = [];
         const seen = new Set<string>();

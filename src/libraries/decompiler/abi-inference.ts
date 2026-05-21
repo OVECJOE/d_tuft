@@ -136,7 +136,7 @@ export class ABIInferrer {
 
     private inferReturnTypeFromSignature(sig: string): string | null {
         const match = sig.match(/\)\s*(returns?\s*)?\((.*)\)/);
-        if (match && match[2]) return match[2].trim();
+        if (match?.[2]) return match[2].trim();
         const returnsMatch = sig.match(/returns?\s*\((.*)\)/);
         if (returnsMatch) return returnsMatch[1]!.trim();
         return null;
@@ -262,6 +262,9 @@ export class ABIInferrer {
     }
 }
 
-export function inferABI(instructions: Instruction[], selectors: Array<{ selector: string; startPC: number; body: Instruction[] }>): InferredFunction[] {
+export function inferABI(
+    instructions: Instruction[],
+    selectors: Array<{ selector: string; startPC: number; body: Instruction[] }>,
+): InferredFunction[] {
     return new ABIInferrer(instructions).inferFunctions(selectors);
 }

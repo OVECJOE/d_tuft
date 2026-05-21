@@ -18,23 +18,22 @@
 import chalk from 'chalk';
 
 export const T = {
-
     // ── Structural chrome ─────────────────────────────────────────────────────
     chrome: {
-        border: chalk.dim.cyan,           // ╔ ═ ╗ ╠ ╣ ╚ ╝ ║ ╪ ╤ ╧
-        sep: chalk.dim,                // ── thin separators
-        bullet: chalk.dim.cyan,           // │ ┆ vertical separators inside rows
-        spinner: chalk.cyan,              // ⠋ ⠙ … spinner frames
+        border: chalk.dim.cyan, // ╔ ═ ╗ ╠ ╣ ╚ ╝ ║ ╪ ╤ ╧
+        sep: chalk.dim, // ── thin separators
+        bullet: chalk.dim.cyan, // │ ┆ vertical separators inside rows
+        spinner: chalk.cyan, // ⠋ ⠙ … spinner frames
     },
 
     // ── Typography ────────────────────────────────────────────────────────────
     text: {
-        heading: chalk.white.bold,        // panel / section titles
-        subheading: chalk.cyan,             // secondary headings
-        key: chalk.dim,              // kv-pair labels
-        body: chalk.white,            // default body text
-        muted: chalk.dim,              // less important text
-        accent: chalk.cyanBright,       // highlighted values
+        heading: chalk.white.bold, // panel / section titles
+        subheading: chalk.cyan, // secondary headings
+        key: chalk.dim, // kv-pair labels
+        body: chalk.white, // default body text
+        muted: chalk.dim, // less important text
+        accent: chalk.cyanBright, // highlighted values
     },
 
     // ── Status messages ───────────────────────────────────────────────────────
@@ -48,14 +47,14 @@ export const T = {
 
     // ── Typed values ──────────────────────────────────────────────────────────
     val: {
-        pc: chalk.dim,               // [00042] program counters
-        immediate: chalk.whiteBright.bold,  // 0xdeadbeef PUSH immediates
-        hex: chalk.dim,               // raw hex byte annotations
-        number: chalk.cyanBright,        // plain numeric stats
-        address: chalk.blueBright,        // ethereum addresses
-        selector: chalk.cyan,             // 0xaabbccdd function selectors
-        filename: chalk.cyan,             // input/output file paths
-        format: chalk.cyan,             // "bytecode" | "assembly"
+        pc: chalk.dim, // [00042] program counters
+        immediate: chalk.whiteBright.bold, // 0xdeadbeef PUSH immediates
+        hex: chalk.dim, // raw hex byte annotations
+        number: chalk.cyanBright, // plain numeric stats
+        address: chalk.blueBright, // ethereum addresses
+        selector: chalk.cyan, // 0xaabbccdd function selectors
+        filename: chalk.cyan, // input/output file paths
+        format: chalk.cyan, // "bytecode" | "assembly"
         /** Gas cost — color scales from dim to red as cost rises */
         gas: (cost: number): string => {
             if (cost === 0) return chalk.dim(`(0 gas)`);
@@ -66,30 +65,28 @@ export const T = {
         },
         /** Stack net effect — colored by sign */
         stackNet: (net: number): string =>
-            net > 0 ? chalk.greenBright.bold(`+${net}`) :
-                net < 0 ? chalk.redBright.bold(String(net)) :
-                    chalk.dim('±0'),
+            net > 0 ? chalk.greenBright.bold(`+${net}`) : net < 0 ? chalk.redBright.bold(String(net)) : chalk.dim('±0'),
     },
 
     // ── Opcode categories ─────────────────────────────────────────────────────
     op: {
-        halt: chalk.redBright.bold,      // STOP RETURN REVERT INVALID SELFDESTRUCT
-        jump: chalk.yellowBright.bold,   // JUMP JUMPI
-        jumpdest: chalk.yellow,              // JUMPDEST
-        push: chalk.cyanBright.bold,     // PUSH0..PUSH32
-        dup: chalk.cyan,                // DUP1..DUP16
-        swap: chalk.cyan,                // SWAP1..SWAP16
-        arithmetic: chalk.green,              // ADD SUB MUL DIV EXP …
-        comparison: chalk.yellow,             // LT GT EQ AND OR XOR …
-        memory: chalk.cyan,               // MLOAD MSTORE POP MSIZE …
-        environment: chalk.blueBright,         // ADDRESS CALLER BLOCKHASH …
-        storage: chalk.magenta,            // SLOAD TLOAD
+        halt: chalk.redBright.bold, // STOP RETURN REVERT INVALID SELFDESTRUCT
+        jump: chalk.yellowBright.bold, // JUMP JUMPI
+        jumpdest: chalk.yellow, // JUMPDEST
+        push: chalk.cyanBright.bold, // PUSH0..PUSH32
+        dup: chalk.cyan, // DUP1..DUP16
+        swap: chalk.cyan, // SWAP1..SWAP16
+        arithmetic: chalk.green, // ADD SUB MUL DIV EXP …
+        comparison: chalk.yellow, // LT GT EQ AND OR XOR …
+        memory: chalk.cyan, // MLOAD MSTORE POP MSIZE …
+        environment: chalk.blueBright, // ADDRESS CALLER BLOCKHASH …
+        storage: chalk.magenta, // SLOAD TLOAD
         storageWrite: chalk.magentaBright.bold, // SSTORE TSTORE
-        system: chalk.blueBright,         // CALL STATICCALL DELEGATECALL
-        create: chalk.blue.bold,           // CREATE CREATE2
-        crypto: chalk.magenta,            // KECCAK256
-        log: chalk.gray,               // LOG0..LOG4
-        deprecated: chalk.dim,               // CALLCODE etc.
+        system: chalk.blueBright, // CALL STATICCALL DELEGATECALL
+        create: chalk.blue.bold, // CREATE CREATE2
+        crypto: chalk.magenta, // KECCAK256
+        log: chalk.gray, // LOG0..LOG4
+        deprecated: chalk.dim, // CALLCODE etc.
         unknown: chalk.white,
     },
 
@@ -112,19 +109,19 @@ export const T = {
 
     // ── Syntax highlighting (Solidity / code) ─────────────────────────────────
     code: {
-        keyword: chalk.magentaBright,        // function, contract, return, if, else, etc.
-        type: chalk.cyanBright,              // uint256, address, bool, bytes, mapping
-        builtin: chalk.yellowBright,         // require, revert, emit, msg, block, tx
-        number: chalk.greenBright,           // numeric literals
-        string: chalk.green,                 // string literals
-        comment: chalk.dim.gray,             // // and /* */ comments
-        operator: chalk.white,               // =, +, -, *, /, etc.
-        punctuation: chalk.dim,              // (, ), {, }, ;, ,
-        identifier: chalk.white,             // variable / function names
-        selector: chalk.cyan,                // 0x... function selectors
-        decorator: chalk.yellow,             // @override, @external, etc.
-        visibility: chalk.blueBright,        // public, private, external, internal
-        mutability: chalk.blue,              // view, pure, payable
+        keyword: chalk.magentaBright, // function, contract, return, if, else, etc.
+        type: chalk.cyanBright, // uint256, address, bool, bytes, mapping
+        builtin: chalk.yellowBright, // require, revert, emit, msg, block, tx
+        number: chalk.greenBright, // numeric literals
+        string: chalk.green, // string literals
+        comment: chalk.dim.gray, // // and /* */ comments
+        operator: chalk.white, // =, +, -, *, /, etc.
+        punctuation: chalk.dim, // (, ), {, }, ;, ,
+        identifier: chalk.white, // variable / function names
+        selector: chalk.cyan, // 0x... function selectors
+        decorator: chalk.yellow, // @override, @external, etc.
+        visibility: chalk.blueBright, // public, private, external, internal
+        mutability: chalk.blue, // view, pure, payable
     },
 } as const;
 

@@ -1,4 +1,4 @@
-import type { Instruction, DisassemblyResult, OpcodeValue } from "./types";
+import type { DisassemblyResult, Instruction, OpcodeValue } from './types';
 
 const TERMINAL_OPS = new Set<OpcodeValue>([
     0x00, // STOP
@@ -40,7 +40,7 @@ export class BytecodeValidator {
     private validateJumpDestinations(
         disassembly: DisassemblyResult,
         errors: ValidationError[],
-        warnings: ValidationWarning[]
+        _warnings: ValidationWarning[],
     ): void {
         const jumpDestSet = new Set(disassembly.jumpDestinations);
 
@@ -69,7 +69,11 @@ export class BytecodeValidator {
         }
     }
 
-    private validatePushData(disassembly: DisassemblyResult, errors: ValidationError[], warnings: ValidationWarning[]): void {
+    private validatePushData(
+        disassembly: DisassemblyResult,
+        errors: ValidationError[],
+        _warnings: ValidationWarning[],
+    ): void {
         for (const w of disassembly.warnings) {
             if (w.includes('Truncated')) {
                 const match = w.match(/at position (\d+)/);

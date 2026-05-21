@@ -1,14 +1,8 @@
-import type { DisassemblyResult, Instruction } from "../core/types";
-import { bytesToHex } from "../utils/hex";
-import { T } from '~~/cli/ui/theme';
 import { padR } from '~~/cli/ui/ansi';
-import {
-    colorizeOpcode,
-    colorizePC,
-    colorizeImmediate,
-    colorizeGas,
-    colorizeHexComment,
-} from "./colors";
+import { T } from '~~/cli/ui/theme';
+import type { DisassemblyResult, Instruction } from '../core/types';
+import { bytesToHex } from '../utils/hex';
+import { colorizeGas, colorizeHexComment, colorizeImmediate, colorizeOpcode, colorizePC } from './colors';
 
 export interface TextFormatOptions {
     includePC?: boolean;
@@ -18,16 +12,8 @@ export interface TextFormatOptions {
 }
 
 /** Format disassembly as human-readable, colorized text */
-export function formatAsText(
-    result: DisassemblyResult,
-    options: TextFormatOptions = {}
-): string {
-    const {
-        includePC = true,
-        includeGas = false,
-        includeHex = false,
-        indentSize = 0
-    } = options;
+export function formatAsText(result: DisassemblyResult, options: TextFormatOptions = {}): string {
+    const { includePC = true, includeGas = false, includeHex = false, indentSize = 0 } = options;
 
     const lines: string[] = [];
     const indent = ' '.repeat(indentSize);
@@ -56,17 +42,14 @@ export function formatAsText(
         lines.push('');
         lines.push(`${indent}${T.op.jumpdest('Jump Destinations:')}`);
         const dests = Array.from(result.jumpDestinations).sort((a, b) => a - b);
-        lines.push(`${indent}  ${dests.map(d => T.op.jumpdest(String(d))).join(T.chrome.sep(', '))}`);
+        lines.push(`${indent}  ${dests.map((d) => T.op.jumpdest(String(d))).join(T.chrome.sep(', '))}`);
     }
 
     return lines.join('\n');
 }
 
 /** Format a single instruction with rich per-field colors */
-export function formatInstruction(
-    instruction: Instruction,
-    options: Partial<TextFormatOptions> = {}
-): string {
+export function formatInstruction(instruction: Instruction, options: Partial<TextFormatOptions> = {}): string {
     const parts: string[] = [];
 
     // PC  [00042]

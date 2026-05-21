@@ -1,6 +1,6 @@
-import { describe, test, expect } from 'vitest';
-import { disassemble } from '../../src/core/parser';
+import { describe, expect, test } from 'vitest';
 import { assemble } from '../../src/core/assembler';
+import { disassemble } from '../../src/core/parser';
 import { bytesToHex } from '../../src/utils/hex';
 import { generateAllOpcodesBytecode } from '../utils/generators';
 
@@ -12,14 +12,14 @@ describe('Round-trip fidelity', () => {
         const disassembled = disassemble(original);
 
         // Convert to assembly
-        const assembly = disassembled.instructions.map(instr => ({
+        const assembly = disassembled.instructions.map((instr) => ({
             mnemonic: instr.opcode.mnemonic,
-            ...(instr.immediate && { operand: bytesToHex(instr.immediate) })
+            ...(instr.immediate && { operand: bytesToHex(instr.immediate) }),
         }));
 
         // Re-assemble
         const reassembled = assemble({ lines: assembly, warnings: [] });
-        
+
         expect(bytesToHex(reassembled)).toBe(original);
     });
 
@@ -27,13 +27,13 @@ describe('Round-trip fidelity', () => {
         const allOpcodesBytecode = generateAllOpcodesBytecode();
 
         const disassembled = disassemble(allOpcodesBytecode);
-        const assembly = disassembled.instructions.map(instr => ({
+        const assembly = disassembled.instructions.map((instr) => ({
             mnemonic: instr.opcode.mnemonic,
-            ...(instr.immediate && { operand: bytesToHex(instr.immediate) })
+            ...(instr.immediate && { operand: bytesToHex(instr.immediate) }),
         }));
 
         const reassembled = assemble({ lines: assembly, warnings: [] });
 
         expect(bytesToHex(reassembled)).toBe(bytesToHex(allOpcodesBytecode));
-    })
+    });
 });

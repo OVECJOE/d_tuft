@@ -1,9 +1,9 @@
 #!/usr/bin/env bun
 
+import chalk from 'chalk';
 import { Command } from 'commander';
 import * as commands from './commands';
 import { BANNER } from './utils';
-import chalk from 'chalk';
 
 function loadCommands(program: Command) {
     Object.values(commands).forEach((register) => {
@@ -31,7 +31,7 @@ if (process.argv.length <= 2) {
 
 program.on('command:*', (operands: string[]) => {
     console.error(chalk.red(`✗ Unknown command: "${operands[0]}"`));
-    const available = program.commands.map(c => c.name()).join(', ');
+    const available = program.commands.map((c) => c.name()).join(', ');
     console.error(chalk.gray(`  Available: ${available}`));
     console.error(chalk.cyan(`  ↳ Run 'd_tuft --help' for usage information`));
     process.exit(1);

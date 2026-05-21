@@ -74,13 +74,10 @@ export class CFGBuilder {
 
         for (let i = 0; i < sortedStarts.length; i++) {
             const start = sortedStarts[i]!;
-            const end = i + 1 < sortedStarts.length
-                ? sortedStarts[i + 1]! - 1
-                : instructions[instructions.length - 1]!.pc;
+            const end =
+                i + 1 < sortedStarts.length ? sortedStarts[i + 1]! - 1 : instructions[instructions.length - 1]!.pc;
 
-            const blockInstrs = instructions.filter(
-                (instr) => instr.pc >= start && instr.pc <= end
-            );
+            const blockInstrs = instructions.filter((instr) => instr.pc >= start && instr.pc <= end);
 
             if (blockInstrs.length === 0) continue;
 
@@ -156,9 +153,7 @@ export class CFGBuilder {
             }
         }
 
-        const exitBlocks = [...blocks.values()]
-            .filter((b) => b.isExit)
-            .map((b) => b.id);
+        const exitBlocks = [...blocks.values()].filter((b) => b.isExit).map((b) => b.id);
 
         return {
             blocks,
@@ -186,7 +181,11 @@ export class CFGBuilder {
         return null;
     }
 
-    private findFallthroughBlock(endPC: number, sortedStarts: number[], blocks: Map<string, BasicBlock>): string | null {
+    private findFallthroughBlock(
+        endPC: number,
+        sortedStarts: number[],
+        blocks: Map<string, BasicBlock>,
+    ): string | null {
         for (const start of sortedStarts) {
             if (start > endPC) {
                 const id = `bb_${start.toString(16).padStart(4, '0')}`;

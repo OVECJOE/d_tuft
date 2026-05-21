@@ -1,17 +1,25 @@
 import { readFileSync, writeFileSync } from 'node:fs';
-import type { Command } from "commander";
-import { formatAsText } from '~~/formats/text';
+import type { Command } from 'commander';
+import { Panel, T, Table } from '~~/cli/ui';
+import { disassemble } from '~~/core';
 import { formatAnnotated } from '~~/formats/annotated';
-import { formatAsJSON } from '~~/formats/json';
-import {
-    tryCatch, startSpinner, stopSpinner,
-    success, error, hint, warn, sectionHeader, sectionFooter, kv
-} from "../utils";
-import { hexToBytes } from "~~/utils";
-import { disassemble } from "~~/core";
-import { StackSimulator } from "~~/utils/stack-simulator";
-import { T, Panel, Table } from '~~/cli/ui';
 import { colorizeOpcode } from '~~/formats/colors';
+import { formatAsJSON } from '~~/formats/json';
+import { formatAsText } from '~~/formats/text';
+import { hexToBytes } from '~~/utils';
+import { StackSimulator } from '~~/utils/stack-simulator';
+import {
+    error,
+    hint,
+    kv,
+    sectionFooter,
+    sectionHeader,
+    startSpinner,
+    stopSpinner,
+    success,
+    tryCatch,
+    warn,
+} from '../utils';
 
 export default function disasm(program: Command) {
     program
@@ -27,13 +35,13 @@ export default function disasm(program: Command) {
         .option('--stack', 'Run stack depth validation after disassembly')
         .action(async (input: string, options) => {
             await tryCatch(async () => {
-                console.log(sectionHeader("Disassembly"));
-                console.log(kv("Input:", T.val.filename(input)));
-                console.log(kv("Format:", T.val.format(options.format)));
-                if (options.gas) console.log(kv("Show gas:", T.status.success("Yes")));
+                console.log(sectionHeader('Disassembly'));
+                console.log(kv('Input:', T.val.filename(input)));
+                console.log(kv('Format:', T.val.format(options.format)));
+                if (options.gas) console.log(kv('Show gas:', T.status.success('Yes')));
                 console.log(sectionFooter());
 
-                startSpinner("Reading input…");
+                startSpinner('Reading input…');
                 let bytecode: Uint8Array;
                 try {
                     if (input.startsWith('0x')) {
@@ -51,11 +59,11 @@ export default function disasm(program: Command) {
                 stopSpinner();
                 console.log(success(`Loaded ${T.val.number(String(bytecode.length))} bytes`));
 
-                startSpinner("Disassembling…");
+                startSpinner('Disassembling…');
                 const result = disassemble(bytecode, {
                     includePC: options.pc,
                     includeGas: options.gas,
-                    identifyFunctions: options.format === 'annotated'
+                    identifyFunctions: options.format === 'annotated',
                 });
                 stopSpinner();
 
@@ -67,16 +75,15 @@ export default function disasm(program: Command) {
                     case 'json':
                         output = formatAsJSON(result);
                         break;
-                    case 'text':
                     default:
                         output = formatAsText(result, {
                             includePC: options.pc,
                             includeGas: options.gas,
-                            includeHex: options.hex
+                            includeHex: options.hex,
                         });
                 }
 
-                console.log(sectionHeader("Results"));
+                console.log(sectionHeader('Results'));
                 console.log(output);
 
                 if (options.output) {
@@ -86,8 +93,8 @@ export default function disasm(program: Command) {
                 }
 
                 console.log(sectionFooter());
-                console.log(kv("Instructions:", T.val.number(String(result.instructions.length))));
-                console.log(kv("Jump destinations:", T.op.jumpdest(String(result.jumpDestinations.size))));
+                console.log(kv('Instructions:', T.val.number(String(result.instructions.length))));
+                console.log(kv('Jump destinations:', T.op.jumpdest(String(result.jumpDestinations.size))));
 
                 if (result.warnings.length > 0) {
                     console.log('');
@@ -99,24 +106,25 @@ export default function disasm(program: Command) {
                     const simResult = sim.simulate(result.instructions);
                     console.log('');
 
-                    console.log(Panel.create('Stack Validation')
-                        .stat('Max depth', String(simResult.maxDepth), T.val.number)
-                        .stat('Final depth', String(simResult.finalDepth), T.text.body)
-                        .stat(
-                            'Errors',
-                            simResult.errors.length === 0 ? '0 — valid' : String(simResult.errors.length),
-                            simResult.errors.length === 0 ? T.status.success : T.status.error,
-                        )
-                        .render()
+                    console.log(
+                        Panel.create('Stack Validation')
+                            .stat('Max depth', String(simResult.maxDepth), T.val.number)
+                            .stat('Final depth', String(simResult.finalDepth), T.text.body)
+                            .stat(
+                                'Errors',
+                                simResult.errors.length === 0 ? '0 — valid' : String(simResult.errors.length),
+                                simResult.errors.length === 0 ? T.status.success : T.status.error,
+                            )
+                            .render(),
                     );
 
                     if (simResult.errors.length > 0) {
                         console.log('');
                         const errTable = Table.create()
-                            .column('', 2, { render: v => T.status.error(v) })
-                            .column('PC', 7, { render: v => T.val.pc(v) })
-                            .column('Opcode', 12, { render: v => colorizeOpcode(v)(v) })
-                            .column('Kind', 10, { render: v => T.status.error(v) });
+                            .column('', 2, { render: (v) => T.status.error(v) })
+                            .column('PC', 7, { render: (v) => T.val.pc(v) })
+                            .column('Opcode', 12, { render: (v) => colorizeOpcode(v)(v) })
+                            .column('Kind', 10, { render: (v) => T.status.error(v) });
 
                         for (const err of simResult.errors.slice(0, 10)) {
                             const icon = err.kind === 'underflow' ? '↓' : '↑';

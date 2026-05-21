@@ -1,7 +1,7 @@
-import { MNEMONIC_TO_OPCODE } from "./opcodes";
-import type { AssemblyLine, AssemblyProgram, AssemblyOptions, Instruction, Opcode } from "./types";
-import { hexToBytes, removeHexPrefix, isHexString, isOddLengthHex, normalizeHex, addHexPrefix } from "../utils/hex";
-import { concatBytes } from "../utils/bytes";
+import { concatBytes } from '../utils/bytes';
+import { addHexPrefix, hexToBytes, isHexString, isOddLengthHex, normalizeHex, removeHexPrefix } from '../utils/hex';
+import { MNEMONIC_TO_OPCODE } from './opcodes';
+import type { AssemblyLine, AssemblyOptions, AssemblyProgram, Instruction, Opcode } from './types';
 
 /**
  * Opcode assembler - converts assembly to bytecode
@@ -9,7 +9,7 @@ import { concatBytes } from "../utils/bytes";
 export class OpcodeAssembler {
     private _warnings: string[] = [];
 
-    constructor(private options: AssemblyOptions = {}) {}
+    constructor(_options: AssemblyOptions = {}) {}
 
     /**
      * Get warnings from last assembly
@@ -34,8 +34,8 @@ export class OpcodeAssembler {
                 throw new Error(
                     `Error assembling line ${i + 1} ("${line.mnemonic}"): ${
                         error instanceof Error ? error.message : String(error)
-                    }`
-                )
+                    }`,
+                );
             }
         }
 
@@ -56,7 +56,7 @@ export class OpcodeAssembler {
             try {
                 const mnemonic = line.mnemonic.toUpperCase();
                 const opcode = MNEMONIC_TO_OPCODE[mnemonic] as Opcode;
-                
+
                 if (!opcode) {
                     throw new Error(`Unknown mnemonic: ${mnemonic}`);
                 }
@@ -64,7 +64,7 @@ export class OpcodeAssembler {
                 const instruction: Instruction = {
                     opcode,
                     pc,
-                    immediate: undefined
+                    immediate: undefined,
                 };
 
                 // Handle PUSH0 - 1 byte total
@@ -82,9 +82,7 @@ export class OpcodeAssembler {
                 // Simple opcode without immediate data - 1 byte
                 else {
                     if (line.operand) {
-                        this.warn(
-                            `Line ${i + 1}: ${mnemonic} doesn't take an operand, ignoring "${line.operand}"`
-                        );
+                        this.warn(`Line ${i + 1}: ${mnemonic} doesn't take an operand, ignoring "${line.operand}"`);
                     }
                     pc += 1;
                 }
@@ -94,7 +92,7 @@ export class OpcodeAssembler {
                 throw new Error(
                     `Error assembling line ${i + 1} ("${line.mnemonic}"): ${
                         error instanceof Error ? error.message : String(error)
-                    }`
+                    }`,
                 );
             }
         }
@@ -115,9 +113,7 @@ export class OpcodeAssembler {
         // Handle PUSH0 explicitly - it takes no operand
         if (opcode.mnemonic === 'PUSH0') {
             if (line.operand) {
-                this.warn(
-                    `Line ${lineNumber + 1}: PUSH0 doesn't take an operand, ignoring "${line.operand}"`
-                );
+                this.warn(`Line ${lineNumber + 1}: PUSH0 doesn't take an operand, ignoring "${line.operand}"`);
             }
             return new Uint8Array([opcode.value]);
         }
@@ -130,17 +126,12 @@ export class OpcodeAssembler {
 
             const immediateData = this.parseOperand(line.operand, opcode.pushBytes, mnemonic);
 
-            return concatBytes(
-                new Uint8Array([opcode.value]),
-                immediateData
-            );
+            return concatBytes(new Uint8Array([opcode.value]), immediateData);
         }
 
         // Simple opcode without immediate data
         if (line.operand) {
-            this.warn(
-                `Line ${lineNumber + 1}: ${mnemonic} doesn't take an operand, ignoring "${line.operand}"`
-            );
+            this.warn(`Line ${lineNumber + 1}: ${mnemonic} doesn't take an operand, ignoring "${line.operand}"`);
         }
         return new Uint8Array([opcode.value]);
     }
@@ -158,17 +149,15 @@ export class OpcodeAssembler {
             if (isOddLengthHex(operand)) {
                 const normalized = normalizeHex(operand);
                 throw new Error(
-                    `Invalid operand for ${mnemonic}: "${operand}" has odd length. Did you mean "${normalized}"?`
+                    `Invalid operand for ${mnemonic}: "${operand}" has odd length. Did you mean "${normalized}"?`,
                 );
             }
-            throw new Error(
-                `Invalid operand for ${mnemonic}: "${operand}" (expected hex string)`
-            );
+            throw new Error(`Invalid operand for ${mnemonic}: "${operand}" (expected hex string)`);
         }
 
         // Convert to bytes
         const bytes = hexToBytes(addHexPrefix(operand));
-        
+
         if (bytes.length < expectedBytes) {
             // Pad left with zeros (big-endian)
             const padded = new Uint8Array(expectedBytes);
@@ -179,7 +168,7 @@ export class OpcodeAssembler {
             // This matches EVM behavior where if you somehow had extra bytes,
             // the instruction would consume only what it needs from the beginning
             this.warn(
-                `Operand "${operand}" is larger than ${expectedBytes} bytes, truncating to leftmost ${expectedBytes} bytes`
+                `Operand "${operand}" is larger than ${expectedBytes} bytes, truncating to leftmost ${expectedBytes} bytes`,
             );
             return bytes.slice(0, expectedBytes);
         }
@@ -194,7 +183,7 @@ export class OpcodeAssembler {
      */
     determinePushSize(value: string): number {
         const hex = removeHexPrefix(value);
-        
+
         // Empty or all zeros should use PUSH0 (EIP-3855)
         if (hex.length === 0 || /^0+$/.test(hex)) {
             return 0;
@@ -203,7 +192,7 @@ export class OpcodeAssembler {
         // Calculate minimum bytes needed (removing leading zeros)
         const trimmed = hex.replace(/^0+/, '');
         const bytes = Math.ceil(trimmed.length / 2);
-        
+
         // Clamp to valid range: 1-32 bytes
         return Math.max(1, Math.min(32, bytes));
     }
@@ -221,12 +210,10 @@ export class OpcodeAssembler {
  */
 export function assemble(
     program: AssemblyProgram | AssemblyLine[],
-    options?: AssemblyOptions
+    options?: AssemblyOptions,
 ): Uint8Array | Instruction[] {
-    const normalizedProgram: AssemblyProgram = Array.isArray(program)
-        ? { lines: program, warnings: [] }
-        : program;
-    
+    const normalizedProgram: AssemblyProgram = Array.isArray(program) ? { lines: program, warnings: [] } : program;
+
     const assembler = new OpcodeAssembler(options);
     if (options?.toInstructions) {
         return assembler.assembleToInstructions(normalizedProgram);

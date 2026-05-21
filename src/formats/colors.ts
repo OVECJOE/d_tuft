@@ -4,7 +4,7 @@
  */
 import { T } from '~~/cli/ui/theme';
 
-const EXACT: Record<string, typeof T.op[keyof typeof T.op]> = {
+const EXACT: Record<string, (typeof T.op)[keyof typeof T.op]> = {
     // Halt
     STOP: T.op.halt,
     RETURN: T.op.halt,
@@ -33,14 +33,14 @@ const EXACT: Record<string, typeof T.op[keyof typeof T.op]> = {
     CREATE2: T.op.create,
 };
 
-const PREFIXES: Array<[string, typeof T.op[keyof typeof T.op]]> = [
+const PREFIXES: Array<[string, (typeof T.op)[keyof typeof T.op]]> = [
     ['PUSH', T.op.push],
     ['DUP', T.op.dup],
     ['SWAP', T.op.swap],
     ['LOG', T.op.log],
 ];
 
-function byRange(value: number): typeof T.op[keyof typeof T.op] {
+function byRange(value: number): (typeof T.op)[keyof typeof T.op] {
     if (value >= 0x00 && value <= 0x0b) return T.op.arithmetic;
     if (value >= 0x10 && value <= 0x1e) return T.op.comparison;
     if (value >= 0x30 && value <= 0x4a) return T.op.environment;

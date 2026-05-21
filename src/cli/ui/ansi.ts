@@ -8,7 +8,8 @@
 /** Strip every ANSI CSI escape sequence from a string */
 export function stripAnsi(str: string): string {
     // Covers SGR (color/style), cursor moves, etc.
-    return str.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '');
+    const ESC = String.fromCharCode(0x1b);
+    return str.replace(new RegExp(`${ESC}\\[[0-9;]*[A-Za-z]`, 'g'), '');
 }
 
 /** Visible (printed) length — excludes escape sequences */

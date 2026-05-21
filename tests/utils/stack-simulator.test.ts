@@ -1,6 +1,6 @@
-import { describe, test, expect } from 'vitest';
-import { StackSimulator } from '../../src/utils/stack-simulator';
+import { describe, expect, test } from 'vitest';
 import { disassemble } from '../../src/core/parser';
+import { StackSimulator } from '../../src/utils/stack-simulator';
 
 describe('StackSimulator', () => {
     test('valid bytecode passes simulation', () => {

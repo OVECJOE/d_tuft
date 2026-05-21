@@ -14,18 +14,18 @@
  * All widths are measured in *visible* (non-ANSI) characters, so coloured
  * values don't break alignment.
  */
-import chalk from 'chalk';
+import type chalk from 'chalk';
+import { padR, visibleLen } from './ansi';
 import { T } from './theme';
-import { padR, padC, visibleLen } from './ansi';
 
 export type PanelItem =
     | { kind: 'stat'; key: string; value: string; color?: typeof chalk }
     | { kind: 'sep' }
-    | { kind: 'row'; content: string };  // free-form colored row
+    | { kind: 'row'; content: string }; // free-form colored row
 
 export class Panel {
     private _title: string;
-    private _width: number;             // total outer width (including ║ ║)
+    private _width: number; // total outer width (including ║ ║)
     private _items: PanelItem[] = [];
 
     private constructor(title: string, width: number) {
@@ -56,7 +56,7 @@ export class Panel {
 
     render(): string {
         const w = this._width;
-        const inner = w - 2;                   // chars between ║ and ║
+        const inner = w - 2; // chars between ║ and ║
         const B = T.chrome.border;
         const H = T.text.heading;
         const lines: string[] = [];
@@ -66,7 +66,7 @@ export class Panel {
         const innerFill = inner - visibleLen(titleVis);
         const lp = Math.floor(innerFill / 2);
         const rp = innerFill - lp;
-        lines.push(B('╔' + '═'.repeat(lp)) + H(titleVis) + B('═'.repeat(rp) + '╗'));
+        lines.push(B(`╔${'═'.repeat(lp)}`) + H(titleVis) + B(`${'═'.repeat(rp)}╗`));
 
         // ── Calculate dynamic key width from longest key ──────────────────────
         const MIN_KEY_W = 12;
@@ -83,7 +83,7 @@ export class Panel {
         // ── Items ─────────────────────────────────────────────────────────────
         for (const item of this._items) {
             if (item.kind === 'sep') {
-                lines.push(B('╠' + '═'.repeat(inner) + '╣'));
+                lines.push(B(`╠${'═'.repeat(inner)}╣`));
                 continue;
             }
 
@@ -99,11 +99,11 @@ export class Panel {
             const rawVal = item.value;
             const coloredVal = (item.color ?? T.val.number)(rawVal);
             const padding = ' '.repeat(Math.max(0, VAL_W - rawVal.length));
-            lines.push(B('║') + ' ' + keyStr + coloredVal + padding + ' ' + B('║'));
+            lines.push(`${B('║')} ${keyStr}${coloredVal}${padding} ${B('║')}`);
         }
 
         // ── Bottom border ─────────────────────────────────────────────────────
-        lines.push(B('╚' + '═'.repeat(inner) + '╝'));
+        lines.push(B(`╚${'═'.repeat(inner)}╝`));
 
         return lines.join('\n');
     }

@@ -1,6 +1,6 @@
-import { describe, test, expect } from 'vitest';
-import { GasCalculator } from '../../src/utils/gas-calculator';
+import { describe, expect, test } from 'vitest';
 import { disassemble } from '../../src/core/parser';
+import { GasCalculator } from '../../src/utils/gas-calculator';
 
 describe('GasCalculator', () => {
     test('analyzes simple bytecode', () => {
@@ -20,7 +20,7 @@ describe('GasCalculator', () => {
     });
 
     test('finds hotspots', () => {
-        const bytecode = '0x' + '54'.repeat(20);
+        const bytecode = `0x${'54'.repeat(20)}`;
         const result = disassemble(bytecode);
         const gc = new GasCalculator();
         const hotspots = gc.hotspots(result.instructions, 3, 5);
@@ -45,12 +45,8 @@ describe('GasCalculator', () => {
 
     test('SLOAD has higher gas than ADD', () => {
         const gc = new GasCalculator();
-        const sloadReport = gc.analyze(
-            disassemble('0x600054').instructions
-        );
-        const addReport = gc.analyze(
-            disassemble('0x6001600201').instructions
-        );
+        const sloadReport = gc.analyze(disassemble('0x600054').instructions);
+        const addReport = gc.analyze(disassemble('0x6001600201').instructions);
         expect(sloadReport.totalGas).toBeGreaterThan(addReport.totalGas);
     });
 });

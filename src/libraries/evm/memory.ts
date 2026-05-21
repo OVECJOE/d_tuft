@@ -74,6 +74,6 @@ export class EvmMemory {
             const b = this.data.get(offset + i) ?? 0;
             bytes.push(b.toString(16).padStart(2, '0'));
         }
-        return '0x' + bytes.join('');
+        return `0x${bytes.join('')}`;
     }
 }

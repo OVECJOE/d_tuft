@@ -16,7 +16,7 @@ export interface Opcode {
     value: OpcodeValue;
 
     /** Human-readable name of the opcode (e.g., "ADD", "PUSH1") */
-    mnemonic: string
+    mnemonic: string;
 
     /** Number of items popped from stack */
     inputs: number;
@@ -164,7 +164,7 @@ export interface ABIParameter {
  */
 export interface ABIEntry {
     /** Type of the ABI entry */
-    type: "function" | "constructor" | "receive" | "fallback" | "event" | "error";
+    type: 'function' | 'constructor' | 'receive' | 'fallback' | 'event' | 'error';
     /** Name of the function/event/error (not applicable for constructor/receive/fallback) */
     name?: string;
     /** Input parameters (for functions, events, errors) */
@@ -172,7 +172,7 @@ export interface ABIEntry {
     /** Output parameters (for functions) */
     outputs?: ABIParameter[];
     /** State mutability (for functions) */
-    stateMutability?: "pure" | "view" | "nonpayable" | "payable";
+    stateMutability?: 'pure' | 'view' | 'nonpayable' | 'payable';
 }
 
 /**
@@ -203,7 +203,7 @@ export interface SelectorDiff {
     /** Human name if resolved via resolveNames() */
     name?: string;
     /** What changed */
-    kind: "added" | "removed" | "modified";
+    kind: 'added' | 'removed' | 'modified';
 }
 
 /**

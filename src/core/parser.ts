@@ -1,11 +1,6 @@
-import { hexToBytes } from "../utils/hex";
-import { OPCODES, INVALID_OPCODE } from "./opcodes";
-import type {
-    Instruction,
-    DisassemblyResult,
-    DisassemblyOptions,
-    Opcode
-} from "./types";
+import { hexToBytes } from '../utils/hex';
+import { INVALID_OPCODE, OPCODES } from './opcodes';
+import type { DisassemblyOptions, DisassemblyResult, Instruction } from './types';
 
 /**
  * Bytecode parser - converts bytecode to instructions
@@ -17,7 +12,7 @@ export class BytecodeParser {
     private warnings: string[] = [];
     private jumpDestinations: Set<number> = new Set();
 
-    constructor(private options: DisassemblyOptions = {}) {}
+    constructor(_options: DisassemblyOptions = {}) {}
 
     /**
      * Main parsing function
@@ -41,7 +36,7 @@ export class BytecodeParser {
             instructions: this.instructions,
             warnings: this.warnings,
             jumpDestinations: this.jumpDestinations,
-            totalBytes: this.bytecode.length
+            totalBytes: this.bytecode.length,
         };
     }
 
@@ -51,10 +46,10 @@ export class BytecodeParser {
     private parseNextInstruction(): Instruction {
         const pc = this.position;
         const byte = this.readByte();
-        
+
         // Look up opcode
         const opcode = OPCODES[byte];
-        
+
         if (!opcode) {
             this.warn(`Unknown opcode 0x${byte.toString(16).padStart(2, '0')} at position ${pc}`);
             return this.createInvalidInstruction(pc);
@@ -63,26 +58,26 @@ export class BytecodeParser {
         // Handle PUSH opcodes
         if (opcode.pushBytes) {
             const [immediate, truncated] = this.readImmediateData(opcode.pushBytes);
-            
+
             // Warn if truncated
             if (truncated) {
                 this.warn(
                     `Truncated ${opcode.mnemonic} at position ${pc}: ` +
-                    `expected ${opcode.pushBytes} bytes, got ${immediate.length}`
+                        `expected ${opcode.pushBytes} bytes, got ${immediate.length}`,
                 );
             }
 
             return {
                 opcode,
                 pc,
-                immediate
+                immediate,
             };
         }
-        
+
         // Regular opcode
         return {
             opcode,
-            pc
+            pc,
         };
     }
 
@@ -102,16 +97,16 @@ export class BytecodeParser {
     private readImmediateData(count: number): [Uint8Array, boolean] {
         const available = this.bytecode.length - this.position;
         const toRead = Math.min(count, available);
-        
+
         const data = new Uint8Array(count);
-        
+
         // Read available bytes
         for (let i = 0; i < toRead; i++) {
             data[i] = this.bytecode[this.position++] as number;
         }
-        
+
         // Remaining bytes are implicitly 0x00 (already zero-initialized)
-        
+
         return [data, toRead < count];
     }
 
@@ -143,10 +138,7 @@ export class BytecodeParser {
 /**
  * Convenience function to parse bytecode
  */
-export function disassemble(
-    bytecode: Uint8Array | string,
-    options?: DisassemblyOptions
-): DisassemblyResult {
+export function disassemble(bytecode: Uint8Array | string, options?: DisassemblyOptions): DisassemblyResult {
     // Convert hex string to bytes if needed
     if (typeof bytecode === 'string') {
         bytecode = hexToBytes(bytecode);

@@ -1,9 +1,4 @@
-import type {
-    Instruction,
-    StackError,
-    SimulationResult,
-    StackProfile,
-} from "../core/types";
+import type { Instruction, SimulationResult, StackError, StackProfile } from '../core/types';
 
 const EVM_MAX_STACK = 1024;
 

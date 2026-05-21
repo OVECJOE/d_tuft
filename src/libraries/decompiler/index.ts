@@ -1,28 +1,30 @@
-export { Decompiler, decompile } from './decompiler';
-export { buildCFG } from './cfg';
-export { inferABI } from './abi-inference';
-export { analyzeStorage } from './storage';
-export { matchPatterns } from './signatures';
-export type {
-    DecompiledContract,
-    DecompiledFunction,
-    DecompileOptions,
-} from './decompiler';
-export type {
-    ControlFlowGraph,
-    BasicBlock,
-    DataFlowEdge,
-} from './cfg';
 export type {
     InferredFunction,
     InferredParameter,
     SolidityType,
 } from './abi-inference';
+export { inferABI } from './abi-inference';
 export type {
-    StorageSlot,
-    StorageType,
-} from './storage';
+    BasicBlock,
+    ControlFlowGraph,
+    DataFlowEdge,
+} from './cfg';
+export { buildCFG } from './cfg';
+export type { DataFlowResult, Expression } from './data-flow';
+export { analyzeDataFlow } from './data-flow';
+export type {
+    DecompiledContract,
+    DecompiledFunction,
+    DecompileOptions,
+} from './decompiler';
+export { Decompiler, decompile } from './decompiler';
 export type {
     MatchedPattern,
     PatternDefinition,
 } from './signatures';
+export { matchPatterns } from './signatures';
+export type {
+    StorageSlot,
+    StorageType,
+} from './storage';
+export { analyzeStorage } from './storage';

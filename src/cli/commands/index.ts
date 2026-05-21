@@ -1,9 +1,9 @@
-export { default as compare } from './compare';
-export { default as roundtrip } from './roundtrip';
-export { default as disasm } from './disasm';
 export { default as asm } from './asm';
-export { default as identify } from './identify';
-export { default as diff } from './diff';
-export { default as gas } from './gas';
-export { default as stack } from './stack';
+export { default as compare } from './compare';
 export { default as decompile } from './decompile';
+export { default as diff } from './diff';
+export { default as disasm } from './disasm';
+export { default as gas } from './gas';
+export { default as identify } from './identify';
+export { default as roundtrip } from './roundtrip';
+export { default as stack } from './stack';

@@ -1,6 +1,6 @@
-import { describe, test, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { describe, expect, test } from 'vitest';
 import { disassemble } from '../../src/core/parser';
-import { readFileSync } from 'fs';
 
 describe('Real contract bytecode', () => {
     test('can parse Uniswap V2 Router', () => {
